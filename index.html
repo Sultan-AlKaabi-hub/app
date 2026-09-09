@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Spine — scan your shelf</title>
+<meta name="description" content="Point your camera at a book. Spine reads the barcode or the cover and files it in your library with real catalogue data.">
+<meta name="theme-color" content="#0C1020">
+<meta name="color-scheme" content="dark">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Spine">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<link rel="icon" href="./icons/icon-192.png" type="image/png">
+<link rel="preconnect" href="https://openlibrary.org">
+<link rel="preconnect" href="https://covers.openlibrary.org">
+<link rel="stylesheet" href="./assets/css/app.css">
+</head>
+<body>
+<noscript><p class="noscript">Spine needs JavaScript to run the camera and read barcodes.</p></noscript>
+
+<!-- ============ INTRO ============ -->
+<section class="view view--intro is-active" id="view-intro" aria-label="Welcome">
+  <div class="intro__sky" aria-hidden="true">
+    <canvas id="dust"></canvas>
+    <div class="intro__lamp" id="intro-lamp"></div>
+  </div>
+
+  <div class="intro__body" id="intro-body">
+    <div class="mark" id="mark" aria-hidden="true">
+      <span class="mark__spine"></span><span class="mark__spine"></span>
+      <span class="mark__spine mark__spine--lit"></span>
+      <span class="mark__spine"></span><span class="mark__spine"></span>
+      <span class="mark__board"></span>
+    </div>
+    <h1 class="intro__title" id="intro-title">Spine</h1>
+    <p class="intro__lede">Point your camera at a book. It lands on your shelf with its real catalogue record — pages, publisher, subjects, blurb.</p>
+
+    <div class="intro__actions">
+      <button class="btn btn--primary" id="intro-start">Start scanning</button>
+      <button class="btn btn--ghost" id="intro-tour">Show me how it works</button>
+      <button class="btn btn--ghost btn--sm" id="intro-install" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px"><path d="M12 4v11M7 10l5 5 5-5M5 19h14"/></svg>
+        Install on this phone
+      </button>
+    </div>
+    <p class="intro__foot" id="intro-count"></p>
+  </div>
+</section>
+
+<!-- ============ TUTORIAL ============ -->
+<section class="view view--tutorial" id="view-tutorial" aria-label="How it works">
+  <div class="tut">
+    <div class="tut__stage" id="tut-stage">
+      <div class="tut__lamp" aria-hidden="true"></div>
+      <canvas id="avatar" width="28" height="28" aria-hidden="true"></canvas>
+      <div class="tut__shadow" aria-hidden="true"></div>
+    </div>
+
+    <div class="tut__speech" role="status" aria-live="polite">
+      <p class="tut__name">Otto, your archivist</p>
+      <p class="tut__line" id="tut-line"></p>
+    </div>
+
+    <div class="tut__demo" id="tut-demo" aria-hidden="true"></div>
+
+    <div class="tut__nav">
+      <div class="tut__dots" id="tut-dots"></div>
+      <div class="tut__btns">
+        <button class="btn btn--ghost btn--sm" id="tut-skip">Skip</button>
+        <button class="btn btn--primary btn--sm" id="tut-next">Next</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ APP ============ -->
+<div class="app" id="app" hidden>
+
+  <!-- LIBRARY -->
+  <section class="view view--page" id="view-library" aria-label="Library">
+    <header class="topbar">
+      <div>
+        <h2 class="topbar__title">Your shelf</h2>
+        <p class="topbar__sub" id="lib-count">Empty</p>
+      </div>
+      <div class="topbar__acts">
+        <button class="iconbtn" id="lib-view" aria-label="Switch to spine view" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h4v16H4zM10 4h3v16h-3zM15.5 5l3.5.9-3.2 14.6-3.4-.9z"/></svg>
+        </button>
+        <button class="iconbtn" id="lib-search-toggle" aria-label="Search your shelf" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+        </button>
+        <button class="iconbtn" data-go="settings" aria-label="Settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="searchwrap" id="searchwrap" hidden>
+      <input type="search" id="lib-search" class="field" placeholder="Title, author, subject" autocomplete="off" aria-label="Search your shelf">
+    </div>
+
+    <nav class="filters" id="lib-filters" aria-label="Filter by reading status">
+      <button class="chip is-on" data-status="all">All</button>
+      <button class="chip" data-status="reading">Reading</button>
+      <button class="chip" data-status="want">To read</button>
+      <button class="chip" data-status="read">Finished</button>
+    </nav>
+
+    <div class="grid" id="lib-grid"></div>
+    <div class="spines" id="lib-spines" hidden></div>
+
+    <div class="empty" id="lib-empty">
+      <div class="empty__shelf" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <h3>Nothing on the shelf yet</h3>
+      <p>Scan the barcode on the back of any book to add the first one.</p>
+      <button class="btn btn--primary" data-go="scan">Scan a book</button>
+    </div>
+  </section>
+
+  <!-- SCAN -->
+  <section class="view view--scan" id="view-scan" aria-label="Scanner">
+    <div class="cam" id="cam">
+      <div id="cam-mount" class="cam__mount"></div>
+      <video id="cam-video" class="cam__video" playsinline muted autoplay hidden></video>
+      <canvas id="cam-grab" hidden></canvas>
+
+      <div class="reticle" id="reticle" aria-hidden="true">
+        <span class="reticle__c reticle__c--tl"></span>
+        <span class="reticle__c reticle__c--tr"></span>
+        <span class="reticle__c reticle__c--bl"></span>
+        <span class="reticle__c reticle__c--br"></span>
+        <span class="reticle__sweep"></span>
+        <span class="reticle__ring"></span>
+      </div>
+
+      <p class="cam__hint" id="cam-hint" role="status" aria-live="polite">Hold the barcode inside the frame</p>
+
+      <div class="cam__err" id="cam-err" hidden>
+        <div class="cam__err-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.2"/><path d="M3 3l18 18"/></svg></div>
+        <h3 id="cam-err-title">Camera unavailable</h3>
+        <p id="cam-err-msg"></p>
+        <button class="btn btn--primary btn--sm" id="cam-retry">Try again</button>
+        <button class="btn btn--ghost btn--sm" data-open="manual">Type an ISBN instead</button>
+      </div>
+    </div>
+
+    <header class="scanbar">
+      <button class="iconbtn iconbtn--solid" data-go="library" aria-label="Back to your shelf">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <span class="engine" id="engine" hidden></span>
+      <div class="scanbar__right">
+        <button class="iconbtn iconbtn--solid" id="btn-torch" aria-label="Toggle flashlight" aria-pressed="false" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2h6l-1 6h4l-9 14 2-9H7z"/></svg>
+        </button>
+        <button class="iconbtn iconbtn--solid" data-open="manual" aria-label="Type an ISBN">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7v10M8 7v10M12 7v10M16 7v10M20 7v10"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="scandock">
+      <div class="modeswitch" role="tablist" aria-label="Scan mode" data-mode="barcode">
+        <span class="modeswitch__pill" aria-hidden="true"></span>
+        <button role="tab" class="modeswitch__opt is-on" data-mode="barcode" aria-selected="true">Barcode</button>
+        <button role="tab" class="modeswitch__opt" data-mode="cover" aria-selected="false">Cover text</button>
+      </div>
+      <p class="scandock__note" id="mode-note">Exact edition, every time. Flip the book over.</p>
+      <button class="shutter" id="btn-shutter" hidden>
+        <span class="shutter__ring"></span><span class="shutter__core"></span>
+        <span class="sr-only">Read this cover</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- STATS -->
+  <section class="view view--page" id="view-stats" aria-label="Reading statistics">
+    <header class="topbar"><div><h2 class="topbar__title">Reading</h2><p class="topbar__sub">What your shelf says about you</p></div>
+      <button class="iconbtn" data-go="settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg>
+      </button></header>
+    <div id="stats-body"></div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="view view--page" id="view-settings" aria-label="Settings">
+    <header class="topbar"><div><h2 class="topbar__title">Settings</h2><p class="topbar__sub">Everything stays on this device</p></div>
+      <button class="iconbtn" data-go="library" aria-label="Back to your shelf">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button></header>
+
+    <div class="rows">
+      <button class="row row--btn" id="set-install" hidden><span><b>Install Spine</b><small>Full screen, on your home screen, no browser bar</small></span>
+        <svg class="row__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 19h14"/></svg></button>
+      <button class="row row--btn" id="set-offline"><span><b>Prepare for offline</b><small id="set-offline-sub">Downloads the scan engines once, so scanning works without a signal</small></span>
+        <svg class="row__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+      <label class="row"><span><b>Vibrate on a match</b><small>A short pulse when a book locks on</small></span>
+        <input type="checkbox" id="set-haptics" class="switch"></label>
+      <label class="row"><span><b>Reduce motion</b><small>Turns off the sweep and card animations</small></span>
+        <input type="checkbox" id="set-motion" class="switch"></label>
+      <button class="row row--btn" id="set-tour"><span><b>Replay the walkthrough</b><small>Otto explains it again</small></span>
+        <svg class="row__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+      <button class="row row--btn" id="set-export"><span><b>Export your shelf</b><small>A JSON file you can keep or re-import</small></span>
+        <svg class="row__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+      <button class="row row--btn" id="set-import"><span><b>Import a shelf file</b><small>Merges with what you already have</small></span>
+        <svg class="row__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+      <button class="row row--btn row--danger" id="set-clear"><span><b>Delete everything</b><small>Removes all books from this device</small></span></button>
+    </div>
+    <input type="file" id="import-file" accept="application/json,.json" hidden>
+    <p class="fineprint" id="ios-hint" hidden>To install on iPhone: tap <b>Share</b> in Safari, then <b>Add to Home Screen</b>.</p>
+    <p class="fineprint">Book data comes from Open&nbsp;Library, a free public catalogue run by the Internet Archive. Spine stores your shelf in this browser only — nothing is uploaded.</p>
+    <p class="fineprint" id="ver"></p>
+  </section>
+
+  <!-- TAB BAR -->
+  <nav class="tabs" aria-label="Main">
+    <button class="tab is-on" data-go="library"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h4v16H4zM10 4h3v16h-3zM15.5 5l3.5.9-3.2 14.6-3.4-.9z"/></svg><span>Shelf</span></button>
+    <button class="tab tab--scan" data-go="scan" aria-label="Scan a book">
+      <span class="tab__fab"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8V5a2 2 0 012-2h3M16 3h3a2 2 0 012 2v3M21 16v3a2 2 0 01-2 2h-3M8 21H5a2 2 0 01-2-2v-3M3 12h18"/></svg></span>
+    </button>
+    <button class="tab" data-go="stats"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span>Reading</span></button>
+  </nav>
+</div>
+
+<!-- ============ BOOK SHEET ============ -->
+<div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-label="Book details">
+  <div class="sheet__scrim" data-close="sheet"></div>
+  <article class="sheet__panel" id="sheet-panel" tabindex="-1">
+    <button class="sheet__grip" data-close="sheet" aria-label="Close"></button>
+    <div id="sheet-body"></div>
+  </article>
+</div>
+
+<!-- ============ MANUAL ISBN ============ -->
+<div class="sheet" id="manual" hidden role="dialog" aria-modal="true" aria-label="Type an ISBN">
+  <div class="sheet__scrim" data-close="manual"></div>
+  <article class="sheet__panel sheet__panel--short" tabindex="-1">
+    <button class="sheet__grip" data-close="manual" aria-label="Close"></button>
+    <h3 class="sheet__h">Type an ISBN</h3>
+    <p class="sheet__p">The 10 or 13 digit number printed under the barcode. Dashes and spaces are fine.</p>
+    <input class="field field--big" id="manual-input" inputmode="numeric" autocomplete="off" placeholder="978…" aria-label="ISBN">
+    <p class="field__err" id="manual-err" hidden></p>
+    <button class="btn btn--primary btn--wide" id="manual-go">Look it up</button>
+</article>
+</div>
+
+<!-- ============ CONFIRM ============ -->
+<div class="sheet" id="confirm" hidden role="alertdialog" aria-modal="true" aria-labelledby="confirm-h">
+  <div class="sheet__scrim" data-close="confirm"></div>
+  <article class="sheet__panel sheet__panel--short" tabindex="-1">
+    <button class="sheet__grip" data-close="confirm" aria-label="Close"></button>
+    <h3 class="sheet__h" id="confirm-h"></h3>
+    <p class="sheet__p" id="confirm-p"></p>
+    <div class="confirm__acts">
+      <button class="btn btn--ghost" data-close="confirm">Keep</button>
+      <button class="btn btn--danger" id="confirm-ok">Delete</button>
+    </div>
+  </article>
+</div>
+
+<!-- ============ OVERLAYS ============ -->
+<div class="lookup" id="lookup" hidden aria-live="polite">
+  <div class="lookup__card">
+    <div class="lookup__spinner" aria-hidden="true"><i></i><i></i><i></i></div>
+    <p id="lookup-msg">Reading the catalogue…</p>
+    <div class="lookup__bar" id="lookup-bar" hidden><span></span></div>
+  </div>
+</div>
+<div class="net" id="net" role="status" aria-live="polite" hidden><i></i><span>Offline — scans are saved for later</span></div>
+<div class="update" id="update" role="status" hidden><span>A new version is ready</span><button class="update__btn" id="update-go">Reload</button></div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<div class="flash" id="flash" aria-hidden="true"></div>
+<div class="pageturn" id="pageturn" aria-hidden="true"></div>
+
+<script src="./assets/js/pixel.js"></script>
+<script src="./assets/js/api.js"></script>
+<script src="./assets/js/scanner.js"></script>
+<script src="./assets/js/app.js"></script>
+</body>
+</html>
