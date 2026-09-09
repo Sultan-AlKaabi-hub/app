@@ -23,8 +23,16 @@
   var CDN_ZXING = 'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
   var CDN_OCR = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
 
-  var state = { mode: null, stream: null, track: null, lib: null, raf: 0, det: null, alive: false, engine: null };
+  var state = { mode: null, stream: null, track: null, lib: null, raf: 0, det: null, alive: false, engine: null, starting: false };
   var loaded = {};
+  var gen = 0;            // start generation: a stale start's callbacks are ignored
+  var chain = Promise.resolve();
+
+  // Android releases the camera asynchronously after a track stops. Asking
+  // for it again too soon fails with NotReadableError ("in use"), which is
+  // why every start waits for the previous teardown plus a short settle.
+  var RELEASE_MS = 350;
+  function delay(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
   function loadScript(src) {
     if (loaded[src]) return loaded[src];
@@ -38,6 +46,13 @@
     return loaded[src];
   }
 
+  /** Android WebView (Median, Capacitor) or iOS WKWebView wrapper. */
+  function isWebView() {
+    var ua = navigator.userAgent || '';
+    return /; wv\)|median|gonative|capacitor/i.test(ua) ||
+      (/iPhone|iPad/.test(ua) && !/Safari/.test(ua));
+  }
+
   /* ---------------- errors in plain language ---------------- */
   function describe(err) {
     // html5-qrcode rejects with bare strings; DOM errors carry a name.
@@ -47,7 +62,10 @@
       return { title: 'This page is not secure', msg: 'Browsers only allow camera access over HTTPS. Open this app on its https:// address.', kind: 'insecure' };
     }
     if (/NotAllowedError|Permission|denied|dismissed/i.test(n)) {
-      return { title: 'Camera permission is off', msg: 'Allow camera access for this app, then tap Try again. On iOS: Settings › Safari › Camera. In the installed app: Settings › Apps › Spine.', kind: 'denied' };
+      if (isWebView()) {
+        return { title: 'This app build cannot use the camera', msg: 'The wrapper has not been granted camera access. Open the phone’s Settings › Apps › Spine › Permissions and allow Camera. If there is no Camera entry, the app was built without the camera permission and needs to be rebuilt with it enabled.', kind: 'denied' };
+      }
+      return { title: 'Camera permission is off', msg: 'Allow camera access for this site, then tap Try again. Android: tap the lock icon in the address bar › Permissions. iOS: Settings › Safari › Camera.', kind: 'denied' };
     }
     if (/NotFoundError|DevicesNotFound|OverconstrainedError|not found|no camera|not supported/i.test(n)) {
       return { title: 'No camera found', msg: 'This device has no camera Spine can reach. You can still type an ISBN.', kind: 'nocam' };
@@ -70,38 +88,66 @@
     }).catch(function () { return null; });
   }
 
-  function openStream(video, hiRes) {
+  function openStream(video, hiRes, attempt) {
+    attempt = attempt || 0;
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       return Promise.reject(new Error(global.isSecureContext ? 'NotFoundError' : 'insecure'));
     }
     var c = {
       audio: false,
-      video: {
-        facingMode: { ideal: 'environment' },
-        width: { ideal: hiRes ? 1920 : 1280 },
-        height: { ideal: hiRes ? 1080 : 720 }
-      }
+      video: attempt < 2
+        ? { facingMode: { ideal: 'environment' }, width: { ideal: hiRes ? 1920 : 1280 }, height: { ideal: hiRes ? 1080 : 720 } }
+        : { facingMode: 'environment' }   // last try: the plainest possible request
     };
+    var myGen = gen;
+    state.starting = true;
     return navigator.mediaDevices.getUserMedia(c).then(function (stream) {
+      state.starting = false;
+      if (myGen !== gen) {
+        // Torn down while the permission prompt was open: release quietly.
+        stream.getTracks().forEach(function (t) { try { t.stop(); } catch (e) {} });
+        throw Object.assign(new Error('stale'), { stale: true });
+      }
       state.stream = stream;
       state.track = stream.getVideoTracks()[0];
       video.srcObject = stream;
       video.setAttribute('playsinline', '');
       video.muted = true;
-      return video.play().catch(function () { /* autoplay retry is harmless */ });
+      // play() resolves only once frames flow; a stalled camera must not
+      // wedge the start chain, so the wait is capped.
+      return Promise.race([
+        video.play().catch(function () { /* autoplay retry is harmless */ }),
+        delay(1500)
+      ]);
+    }).catch(function (e) {
+      state.starting = false;
+      if (e && e.stale) throw e;
+      // "In use" is almost always the previous stream still releasing.
+      if (attempt < 2 && myGen === gen && /NotReadableError|TrackStart|AbortError/i.test((e && e.name) || '')) {
+        return delay(700 + attempt * 500).then(function () {
+          if (myGen !== gen) throw Object.assign(new Error('stale'), { stale: true });
+          return openStream(video, hiRes, attempt + 1);
+        });
+      }
+      throw e;
     });
   }
 
   /* ---------------- barcode ---------------- */
   function startBarcode(o) {
-    stop();
-    state.mode = 'barcode';
-    state.alive = true;
-
-    return nativeDetector().then(function (det) {
-      if (det) return startNative(o, det);
-      return startZxing(o);
-    }).catch(function (e) { o.onError(describe(e)); });
+    var myGen = ++gen;
+    var run = function () {
+      if (myGen !== gen) return;
+      state.mode = 'barcode';
+      state.alive = true;
+      return nativeDetector().then(function (det) {
+        if (myGen !== gen) return;
+        if (det) return startNative(o, det);
+        return startZxing(o);
+      }).catch(function (e) { if (myGen === gen && !(e && e.stale)) o.onError(describe(e)); });
+    };
+    chain = chain.then(stop).then(function () { return delay(RELEASE_MS); }).then(run);
+    return chain;
   }
 
   function startNative(o, det) {
@@ -110,6 +156,7 @@
     o.video.hidden = false;
     o.mount.hidden = true;
     return openStream(o.video, false).then(function () {
+      if (!state.alive) return;
       o.onReady && o.onReady({ torch: torchable(), engine: 'native' });
       loop(o);
     });
@@ -126,12 +173,17 @@
         experimentalFeatures: { useBarCodeDetectorIfSupported: false }
       });
       state.engine = 'zxing';
+      state.starting = true;
       return state.lib.start(
         { facingMode: 'environment' },
         { fps: 12, disableFlip: true, videoConstraints: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } },
         function (text) { if (state.alive) o.onHit(text); },
         function () { /* per-frame misses are normal */ }
-      ).then(function () { o.onReady && o.onReady({ torch: libTorchable(), engine: 'zxing' }); });
+      ).then(function () {
+        state.starting = false;
+        if (!state.alive) return;
+        o.onReady && o.onReady({ torch: libTorchable(), engine: 'zxing' });
+      }, function (e) { state.starting = false; throw e; });
     });
   }
 
@@ -150,11 +202,13 @@
           // The API exists but the platform has no detection service.
           if (++fails >= 12 && state.alive) {
             fails = 0;
-            var video = o.video;
-            stop();
-            state.mode = 'barcode'; state.alive = true;
-            video.hidden = true;
-            startZxing(o).catch(function (e) { o.onError(describe(e)); });
+            var myGen = ++gen;
+            chain = chain.then(stop).then(function () { return delay(RELEASE_MS); }).then(function () {
+              if (myGen !== gen) return;
+              state.mode = 'barcode'; state.alive = true;
+              o.video.hidden = true;
+              return startZxing(o);
+            }).catch(function (e) { if (myGen === gen && !(e && e.stale)) o.onError(describe(e)); });
           }
         });
       }
@@ -164,15 +218,20 @@
 
   /* ---------------- cover / OCR ---------------- */
   function startCover(o) {
-    stop();
-    state.mode = 'cover';
-    state.alive = true;
-    state.engine = 'camera';
-    o.video.hidden = false;
-    o.mount.hidden = true;
-    return openStream(o.video, true)
-      .then(function () { o.onReady && o.onReady({ torch: torchable(), engine: 'camera' }); })
-      .catch(function (e) { o.onError(describe(e)); });
+    var myGen = ++gen;
+    chain = chain.then(stop).then(function () { return delay(RELEASE_MS); }).then(function () {
+      if (myGen !== gen) return;
+      state.mode = 'cover';
+      state.alive = true;
+      state.engine = 'camera';
+      o.video.hidden = false;
+      o.mount.hidden = true;
+      return openStream(o.video, true).then(function () {
+        if (!state.alive) return;
+        o.onReady && o.onReady({ torch: torchable(), engine: 'camera' });
+      });
+    }).catch(function (e) { if (myGen === gen && !(e && e.stale)) o.onError(describe(e)); });
+    return chain;
   }
 
   /** Grab the current frame, clean it up, and hand it to Tesseract. */
@@ -280,15 +339,19 @@
   }
 
   /* ---------------- teardown ---------------- */
+  /** Tear down whatever is running. Resolves once the tracks are released. */
   function stop() {
     state.alive = false;
     cancelAnimationFrame(state.raf);
     state.det = null;
     fails = 0;
+    var waits = [];
     if (state.lib) {
       var lib = state.lib;
       state.lib = null;
-      try { lib.stop().then(function () { try { lib.clear(); } catch (e) {} }).catch(function () {}); } catch (e) {}
+      try {
+        waits.push(lib.stop().then(function () { try { lib.clear(); } catch (e) {} }).catch(function () {}));
+      } catch (e) {}
     }
     if (state.stream) {
       state.stream.getTracks().forEach(function (t) { try { t.stop(); } catch (e) {} });
@@ -296,6 +359,13 @@
     }
     state.mode = null;
     state.engine = null;
+    return Promise.all(waits).then(function () {});
+  }
+
+  /** Invalidate any start in flight, then tear down. */
+  function cancel() {
+    gen++;
+    return stop();
   }
 
   global.Scanner = {
@@ -304,8 +374,10 @@
     readCover: readCover,
     warm: warm,
     torch: torch,
-    stop: stop,
+    stop: cancel,
     describe: describe,
+    isLive: function () { return !!(state.stream || state.lib) && state.alive; },
+    isStarting: function () { return state.starting; },
     distil: distil,
     engine: function () { return state.engine; }
   };

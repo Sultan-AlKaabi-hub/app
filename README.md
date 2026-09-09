@@ -76,6 +76,24 @@ The first time the camera opens, the browser (or the wrapper) shows the
 permission prompt. The app explains every denial state in plain language and
 offers "Type an ISBN instead" as a way through.
 
+### If the APK says it has no camera permission and never asks
+
+That means the wrapper itself was built without the camera permission, so
+Android never shows a prompt and the WebView reports "denied" immediately.
+In the Median App Studio:
+
+1. **Native Plugins → Permissions** (or **Android → Permissions** depending
+   on the console layout): turn **Camera** on. Save.
+2. **Rebuild** the Android app and reinstall the new APK. Permissions live in
+   the APK manifest; editing the website cannot add them.
+3. On the phone, confirm **Settings › Apps › Spine › Permissions** now lists
+   Camera. Allow it, or leave it and the app will prompt on first scan.
+
+Android also drops the page to "hidden" while the permission dialog is up.
+Version 1.1.1 leaves a pending camera request alone during that moment; the
+1.1.0 build tore it down and restarted it, which re-opened the dialog in a
+loop and, on the web, produced "camera is used by another app".
+
 ---
 
 ## How scanning works

@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.1.0';
+  var VERSION = '1.1.1';
   var KEY = 'spine.shelf.v1';
   var KEY_SET = 'spine.settings.v1';
   var KEY_TOUR = 'spine.tour.v1';
@@ -1247,10 +1247,18 @@
     $('#set-install').onclick = install;
     window.addEventListener('appinstalled', function () { installEvt = null; $('#intro-install').hidden = true; });
 
-    // Camera must not stay live in the background.
+    // Camera must not stay live in the background. The page also goes
+    // hidden while the permission dialog is up (Android, WebViews), so a
+    // start that is still negotiating is left alone: tearing it down and
+    // restarting would re-open the dialog in a loop.
+    var resumeOnVisible = false;
     document.addEventListener('visibilitychange', function () {
-      if (document.hidden && current === 'scan') leaveScan();
-      else if (!document.hidden && current === 'scan' && !overlayOpen()) setMode(mode, true);
+      if (document.hidden) {
+        if (current === 'scan' && window.Scanner.isLive()) { leaveScan(); resumeOnVisible = true; }
+      } else if (resumeOnVisible) {
+        resumeOnVisible = false;
+        if (current === 'scan' && !overlayOpen() && !scanning) setMode(mode, true);
+      }
     });
     window.addEventListener('pagehide', leaveScan);
 
