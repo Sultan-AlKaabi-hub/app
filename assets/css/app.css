@@ -136,8 +136,9 @@ svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .intro__sky{position:absolute;inset:0;overflow:hidden}
 .intro__sky::after{
   content:"";position:absolute;inset:0;
-  background:radial-gradient(120% 60% at 50% 4%, rgba(46,158,143,.07), transparent 70%);
+  background:radial-gradient(120% 60% at 50% 4%, rgba(46,158,143,.05), transparent 70%);
 }
+#dust{image-rendering:pixelated;image-rendering:crisp-edges;animation:fade 1.2s .2s both}
 #dust{position:absolute;inset:0;width:100%;height:100%}
 .intro__lamp{
   position:absolute;left:50%;top:58%;width:160vmax;height:160vmax;
@@ -606,8 +607,8 @@ svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 
 .otto{
   position:fixed;right:var(--s3);bottom:calc(var(--tabh) + var(--sab) + var(--s3));z-index:47;
-  width:min(calc(100vw - var(--s3) * 2),380px);
-  max-height:min(72vh,72dvh,600px);
+  width:380px;max-width:calc(100vw - 24px);
+  max-height:72vh;max-height:min(72dvh,600px);
   display:grid;grid-template-rows:auto 1fr auto auto;
   background:linear-gradient(180deg,var(--slate),var(--shelf) 30%);
   border-radius:var(--r-lg);
@@ -626,7 +627,14 @@ svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .otto__avatar canvas{width:38px;height:38px;image-rendering:pixelated;transform:translateY(2px)}
 .otto__who{flex:1;min-width:0}
 .otto__who b{display:block;font-family:var(--serif);font-size:var(--t-lg);line-height:1.1}
-.otto__who small{display:block;color:var(--brass);font-size:var(--t-xs);min-height:1.2em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.otto__who small{display:block;color:var(--brass);font-size:var(--t-xs);min-height:1.2em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.otto__lang{min-width:38px;height:30px;padding:0 8px;border-radius:999px;font-size:var(--t-xs);font-weight:700;letter-spacing:.06em;color:var(--paper-dim);
+  box-shadow:inset 0 0 0 1px rgba(241,235,220,.18);transition:all .2s var(--ease)}
+.otto__lang:active{transform:scale(.94)}
+.otto[dir="rtl"] .omsg--otto .omsg__b{border-bottom-left-radius:16px;border-bottom-right-radius:5px}
+.otto[dir="rtl"] .omsg--me .omsg__b{border-bottom-right-radius:16px;border-bottom-left-radius:5px}
+.otto[dir="rtl"] .otto__form{direction:rtl}
+.row__val{color:var(--brass);font-weight:700;font-size:var(--t-sm);letter-spacing:.06em;flex:0 0 auto}
 .otto__ib{width:38px;height:38px;color:var(--muted)}
 .otto__ib svg{width:20px;height:20px}
 .otto__ib[aria-pressed="true"]{background:rgba(217,164,65,.14);color:var(--brass)}
@@ -674,7 +682,7 @@ svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 @keyframes wave{50%{transform:scaleY(2.6)}}
 
 @media(min-width:640px){
-  .otto{right:var(--s5);bottom:calc(var(--tabh) + var(--sab) + var(--s5));width:400px;max-height:min(70vh,640px)}
+  .otto{right:var(--s5);bottom:calc(var(--tabh) + var(--sab) + var(--s5));width:400px;max-height:70vh;max-height:min(70dvh,640px)}
   .otto-fab{right:var(--s5);bottom:calc(var(--tabh) + var(--sab) + var(--s5))}
 }
 body.no-motion .otto{transition:none}

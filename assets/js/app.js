@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.4.0';
+  var VERSION = '1.5.0';
 
   // Where the app lives and where the Android package is published.
   // The APK URL follows the GitHub Releases convention: upload the file
@@ -274,7 +274,7 @@
   function endTour() {
     clearTimeout(typeT);
     localStorage.setItem(KEY_TOUR, '1');
-    pageTurn(function () { go('scan'); });
+    pageTurn(function () { go('library'); });
   }
 
   /* =======================================================
@@ -1021,7 +1021,14 @@
     return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   }
 
+  function syncLangRow(l) {
+    $('#set-lang-val').textContent = l === 'ar' ? 'ع' : 'EN';
+    $('#set-lang-sub').textContent = l === 'ar'
+      ? 'العربية. يبدّل أوتو إلى الإنجليزية عندما تكتب بها.'
+      : 'English. Otto also switches when you write in Arabic.';
+  }
   function syncSettings() {
+    if (window.Otto) syncLangRow(window.Otto.lang());
     $('#set-haptics').checked = !!settings.haptics;
     $('#set-motion').checked = !settings.motion;
     $('#ver').textContent = 'Spine ' + VERSION + (isStandalone() ? ' · installed' : '') +
@@ -1209,7 +1216,7 @@
     load();
     dressIntro();
     showIntro();                          // must precede mountDust: the
-    dust = window.Pixel.mountDust($('#dust'));   // canvas has no size until laid out
+    dust = window.Pixel.mountLibrary($('#dust'));   // canvas has no size until laid out
 
     // Manifest shortcut and deep links land straight on the scanner.
     var want = new URLSearchParams(location.search).get('go');
@@ -1217,7 +1224,7 @@
 
     $('#intro-start').onclick = function () {
       if (!localStorage.getItem(KEY_TOUR)) showTutorial();
-      else pageTurn(function () { go(shelf.length ? 'library' : 'scan'); });
+      else pageTurn(function () { go('library'); });
     };
     $('#intro-tour').onclick = showTutorial;
     $('#tut-skip').onclick = endTour;
@@ -1311,6 +1318,12 @@
     $('#set-offline').onclick = prepareOffline;
     $('#set-faq').onclick = function () { go('faq'); };
     $('#set-ask').onclick = function () { if (window.Otto) window.Otto.open(); };
+    $('#set-lang').onclick = function () {
+      if (!window.Otto) return;
+      var l = window.Otto.setLang(window.Otto.lang() === 'ar' ? 'en' : 'ar');
+      syncLangRow(l);
+      buzz(10);
+    };
     $('#faq-ask').onclick = function () { if (window.Otto) window.Otto.open(); };
     $('#faq-search').oninput = function () { faqQuery = this.value.trim(); renderFaq(); };
     $('#faq-body').onclick = function (e) {
@@ -1320,7 +1333,12 @@
     };
 
     // Get the app
-    function openGetApp() { renderGetApp(); openSheet('getapp'); }
+    function openGetApp() {
+      renderGetApp();
+      $('#qr-install').hidden = !installEvt;
+      $('#qr-ioshint').hidden = !(isIOS() && !isStandalone());
+      openSheet('getapp');
+    }
     $('#intro-getapp').onclick = openGetApp;
     $('#set-getapp').onclick = openGetApp;
     $$('.seg__opt').forEach(function (b) {
@@ -1337,7 +1355,7 @@
     window.addEventListener('beforeinstallprompt', function (e) {
       e.preventDefault();
       installEvt = e;
-      $('#intro-install').hidden = false;
+      $('#qr-install').hidden = false;
       if (current === 'settings') syncSettings();
     });
     function install() {
@@ -1345,13 +1363,13 @@
       var ev = installEvt;
       ev.prompt();
       ev.userChoice.then(function (r) {
-        if (r.outcome === 'accepted') { installEvt = null; $('#intro-install').hidden = true; toast('Installed. Find Spine on your home screen.', 'ok'); }
+        if (r.outcome === 'accepted') { installEvt = null; $('#qr-install').hidden = true; toast('Installed. Find Spine on your home screen.', 'ok'); }
         if (current === 'settings') syncSettings();
       });
     }
-    $('#intro-install').onclick = install;
+    $('#qr-install').onclick = install;
     $('#set-install').onclick = install;
-    window.addEventListener('appinstalled', function () { installEvt = null; $('#intro-install').hidden = true; });
+    window.addEventListener('appinstalled', function () { installEvt = null; $('#qr-install').hidden = true; });
 
     // Camera must not stay live in the background. The page also goes
     // hidden while the permission dialog is up (Android, WebViews), so a

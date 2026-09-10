@@ -40,15 +40,11 @@
     <p class="intro__lede">Point your camera at a book. It lands on your shelf with its real catalogue record — pages, publisher, subjects, blurb.</p>
 
     <div class="intro__actions">
-      <button class="btn btn--primary" id="intro-start">Start scanning</button>
+      <button class="btn btn--primary" id="intro-start">Open my shelf</button>
       <button class="btn btn--ghost" id="intro-tour">Show me how it works</button>
       <button class="btn btn--ghost btn--sm" id="intro-getapp">
-        <svg viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2v2h-2zM14 18h2v2h-2zM18 18h2v2h-2z"/></svg>
-        Get the app on your phone
-      </button>
-      <button class="btn btn--ghost btn--sm" id="intro-install" hidden>
         <svg viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px"><path d="M12 4v11M7 10l5 5 5-5M5 19h14"/></svg>
-        Install on this phone
+        Get the app
       </button>
     </div>
     <p class="intro__foot" id="intro-count"></p>
@@ -211,6 +207,8 @@
         <input type="checkbox" id="set-motion" class="switch"></label>
       <button class="row row--btn" id="set-faq"><span><b>Help &amp; FAQ</b><small>Scanning, camera, offline, your shelf</small></span>
         <svg class="row__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+      <button class="row row--btn" id="set-lang"><span><b>Otto's language</b><small id="set-lang-sub">English. Otto also switches when you write in Arabic.</small></span>
+        <span class="row__val" id="set-lang-val">EN</span></button>
       <button class="row row--btn" id="set-ask"><span><b>Ask Otto</b><small>Your shelf, what to read next, how the app works</small></span>
         <svg class="row__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
       <button class="row row--btn" id="set-tour"><span><b>Replay the walkthrough</b><small>Otto explains it again</small></span>
@@ -252,6 +250,7 @@
         <b>Otto</b>
         <small id="otto-status" role="status" aria-live="polite"></small>
       </div>
+      <button class="otto__lang" id="otto-lang" aria-label="Switch language" title="English / العربية">EN</button>
       <button class="iconbtn otto__ib" id="otto-voice" aria-label="Otto speaks aloud" aria-pressed="true">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9zM16 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11"/></svg>
       </button>
@@ -311,6 +310,12 @@
   <article class="sheet__panel sheet__panel--short" tabindex="-1">
     <button class="sheet__grip" data-close="getapp" aria-label="Close"></button>
     <h3 class="sheet__h">Get Spine on a phone</h3>
+    <button class="btn btn--primary btn--wide" id="qr-install" hidden style="margin-top:.5rem">
+      <svg viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px"><path d="M12 4v11M7 10l5 5 5-5M5 19h14"/></svg>
+      Install on this phone
+    </button>
+    <p class="sheet__p" id="qr-ioshint" hidden style="margin-top:.5rem">On this iPhone: tap <b>Share</b> in Safari, then <b>Add to Home Screen</b>.</p>
+    <p class="sheet__p" style="margin-top:.75rem">For another phone, scan or send a link:</p>
     <div class="seg" role="tablist" aria-label="Platform" data-os="android">
       <span class="seg__pill" aria-hidden="true"></span>
       <button role="tab" class="seg__opt is-on" data-os="android" aria-selected="true">Android</button>

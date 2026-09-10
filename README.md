@@ -219,6 +219,24 @@ agent's configured greeting is suppressed in text sessions because Otto has
 already said hello. Setting `mode` to `'widget'` restores the official
 ElevenLabs bubble; `'off'` hides Otto entirely.
 
+### Arabic
+
+Otto speaks English and Arabic. The EN / ع button in the panel header (and
+"Otto's language" in Settings) sets the default; writing in the other
+script switches automatically for that message. Shelf questions are
+answered locally in Arabic (counts, statuses, one book's details,
+recommendations); everything else goes to the agent with a language
+override so the ElevenLabs session runs in Arabic, using the multilingual
+speech model set in the agent's Arabic language preset. The browser's own
+Arabic voice is used for local answers when one is installed.
+
+Agent configuration (done through the API, visible in the dashboard):
+four client tools attached (`get_shelf_summary`, `find_book`, `list_books`,
+`recommend_books`), a section "8. The user's own shelf (tools)" appended to
+the system prompt, Otto's greeting in English and Arabic, and the Arabic
+preset on `eleven_flash_v2_5`. To give Otto a native Arabic voice, open
+Agent → Language → Arabic and pick an Arabic voice for that preset.
+
 ### Recommendations
 
 `Shelf.recommend(seedId)` takes the subjects of one book (or the most common

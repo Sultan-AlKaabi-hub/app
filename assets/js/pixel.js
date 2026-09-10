@@ -252,5 +252,146 @@
     };
   }
 
-  global.Pixel = { mountAvatar: mountAvatar, mountDust: mountDust, sheets: SHEETS };
+  /* ---------------------------------------------------------
+     Intro scene: a procedural pixel-art library. Shelves of books
+     in the app palette, a few plants and candles, lamplight, and
+     loose pages drifting up through the air. Drawn once at a coarse
+     cell size onto an offscreen canvas and upscaled without
+     smoothing, so it is crisp and costs almost nothing per frame.
+     --------------------------------------------------------- */
+  function mountLibrary(canvas) {
+    var ctx = canvas.getContext('2d');
+    var CELL = 4, W = 0, H = 0, cw = 0, ch = 0;
+    var scene = document.createElement('canvas');
+    var pages = [], raf = 0, stopped = false, t0 = performance.now();
+    var BOOKS = ['#8C3B2E', '#B5552F', '#2E6F6A', '#25406B', '#6E63C9', '#A87A24', '#5B6B2F', '#7A2E4E', '#C9C3B6', '#3E7A5C', '#8A5A3C', '#4A5384', '#D9A441', '#6B2F2F'];
+    var seed = 7;
+    function rnd() { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; }
+    function pick(a) { return a[Math.floor(rnd() * a.length)]; }
+
+    function build() {
+      W = canvas.clientWidth; H = canvas.clientHeight;
+      var dpr = Math.min(global.devicePixelRatio || 1, 2);
+      canvas.width = W * dpr; canvas.height = H * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.imageSmoothingEnabled = false;
+      cw = Math.ceil(W / CELL); ch = Math.ceil(H / CELL);
+      scene.width = cw; scene.height = ch;
+      var s = scene.getContext('2d');
+      seed = 7;
+
+      // wall
+      s.fillStyle = '#0E1226'; s.fillRect(0, 0, cw, ch);
+      for (var i = 0; i < cw * ch * 0.02; i++) { s.fillStyle = 'rgba(241,235,220,0.03)'; s.fillRect(Math.floor(rnd() * cw), Math.floor(rnd() * ch), 1, 1); }
+
+      // bookcase: uprights and shelf rows over the top 74% of the screen
+      var rowH = 13, top = 2, bottom = Math.floor(ch * 0.74);
+      var colW = 26;
+      for (var x = 0; x < cw + colW; x += colW) { s.fillStyle = '#2A1C14'; s.fillRect(x, 0, 2, bottom + 2); }
+      for (var y = top; y + rowH <= bottom + rowH; y += rowH) {
+        var boardY = y + rowH - 2;
+        // books on this row
+        for (var col = 0; col < cw + colW; col += colW) {
+          var x0 = col + 2, xEnd = Math.min(col + colW, cw + 2);
+          var cx = x0 + 1;
+          while (cx < xEnd - 1) {
+            var r = rnd();
+            if (r < 0.06) { cx += 2 + Math.floor(rnd() * 3); continue; }               // a gap
+            if (r < 0.10 && xEnd - cx > 5) {                                            // plant
+              s.fillStyle = '#6B3F2A'; s.fillRect(cx, boardY - 3, 3, 3);
+              s.fillStyle = '#3E7A5C'; s.fillRect(cx - 1, boardY - 6, 5, 3); s.fillRect(cx, boardY - 7, 3, 1);
+              cx += 5; continue;
+            }
+            if (r < 0.13 && xEnd - cx > 4) {                                            // candle
+              s.fillStyle = '#F1EBDC'; s.fillRect(cx + 1, boardY - 4, 1, 4);
+              s.fillStyle = '#F2B33D'; s.fillRect(cx + 1, boardY - 5, 1, 1);
+              s.fillStyle = 'rgba(242,179,61,.35)'; s.fillRect(cx, boardY - 6, 3, 3);
+              cx += 4; continue;
+            }
+            var w = 2 + Math.floor(rnd() * 3), h = 8 + Math.floor(rnd() * 4);
+            if (cx + w > xEnd - 1) break;
+            var c = pick(BOOKS);
+            s.fillStyle = c; s.fillRect(cx, boardY - h, w, h);
+            s.fillStyle = 'rgba(0,0,0,.28)'; s.fillRect(cx + w - 1, boardY - h, 1, h);   // spine shade
+            s.fillStyle = 'rgba(241,235,220,.55)'; s.fillRect(cx, boardY - h + 2, w, 1); // title band
+            if (rnd() < 0.5) s.fillRect(cx, boardY - 3, w, 1);
+            cx += w;
+          }
+        }
+        // shelf board
+        s.fillStyle = '#5A4030'; s.fillRect(0, boardY, cw, 1);
+        s.fillStyle = '#3B2A1E'; s.fillRect(0, boardY + 1, cw, 1);
+        s.fillStyle = 'rgba(0,0,0,.35)'; s.fillRect(0, boardY + 2, cw, 1);
+      }
+      // floor line and a rug of shadow below the case
+      s.fillStyle = '#1A1410'; s.fillRect(0, bottom + 2, cw, 1);
+
+      // the room is dim; a lamp somewhere off to the left throws a cone of
+      // light across the upper shelves, and the floor falls into shadow so
+      // the title and buttons sit on near-black
+      s.fillStyle = 'rgba(12,16,32,.42)'; s.fillRect(0, 0, cw, ch);
+      var cone = s.createLinearGradient(0, 0, cw * 0.9, ch * 0.7);
+      cone.addColorStop(0, 'rgba(217,164,65,.20)'); cone.addColorStop(0.45, 'rgba(217,164,65,.06)'); cone.addColorStop(1, 'rgba(217,164,65,0)');
+      s.fillStyle = cone; s.fillRect(0, 0, cw, ch);
+      var g = s.createRadialGradient(cw * 0.5, ch * 0.62, 2, cw * 0.5, ch * 0.62, cw * 0.55);
+      g.addColorStop(0, 'rgba(217,164,65,.16)'); g.addColorStop(1, 'rgba(217,164,65,0)');
+      s.fillStyle = g; s.fillRect(0, 0, cw, ch);
+      var v = s.createLinearGradient(0, ch * 0.18, 0, ch);
+      v.addColorStop(0, 'rgba(12,16,32,0)'); v.addColorStop(0.42, 'rgba(12,16,32,.72)'); v.addColorStop(0.62, 'rgba(12,16,32,.9)'); v.addColorStop(1, 'rgba(12,16,32,.98)');
+      s.fillStyle = v; s.fillRect(0, 0, cw, ch);
+      var e = s.createLinearGradient(0, 0, cw, 0);
+      e.addColorStop(0, 'rgba(12,16,32,.55)'); e.addColorStop(0.35, 'rgba(12,16,32,0)'); e.addColorStop(0.65, 'rgba(12,16,32,0)'); e.addColorStop(1, 'rgba(12,16,32,.55)');
+      s.fillStyle = e; s.fillRect(0, 0, cw, ch);
+
+      // loose pages
+      pages = [];
+      var n = Math.round(Math.min(11, W * H / 60000));
+      for (var k = 0; k < n; k++) pages.push(newPage(true));
+    }
+    // Pages live among the shelves, above the text; they fade in low and
+    // drift up, never crossing the buttons.
+    function newPage(anywhere) {
+      var top = H * 0.58;
+      return { x: Math.random() * W, y: anywhere ? Math.random() * top : top + 10, v: 0.12 + Math.random() * 0.22,
+        ph: Math.random() * 6.28, sp: 0.4 + Math.random() * 0.6, a: 0.28 + Math.random() * 0.4, big: Math.random() < 0.35 };
+    }
+    function paint(now, advance) {
+      ctx.clearRect(0, 0, W, H);
+      ctx.drawImage(scene, 0, 0, cw * CELL, ch * CELL);
+      var t = (now - t0) / 1000;
+      for (var i = 0; i < pages.length; i++) {
+        var p = pages[i];
+        if (advance) {
+          p.y -= p.v; p.ph += 0.01 * p.sp; p.x += Math.sin(p.ph) * 0.35;
+          if (p.y < -24) pages[i] = p = newPage(false);
+        }
+        // a page turning in the air: its apparent width breathes between wide and edge-on
+        var flip = Math.cos(t * p.sp * 1.6 + p.ph);
+        var wCells = p.big ? 4 : 3, hCells = p.big ? 5 : 4;
+        var w = Math.max(1, Math.round(wCells * Math.abs(flip))) * CELL, h = hCells * CELL;
+        var x = Math.round(p.x / CELL) * CELL, y = Math.round(p.y / CELL) * CELL;
+        var fade = Math.max(0, Math.min(1, (H * 0.58 - p.y) / 40));   // ease in as it leaves the text zone
+        ctx.globalAlpha = p.a * fade;
+        ctx.fillStyle = '#F1EBDC'; ctx.fillRect(x, y, w, h);
+        ctx.fillStyle = 'rgba(12,16,32,.35)';
+        for (var l = 1; l < hCells - 1; l += 2) ctx.fillRect(x + CELL * 0.5, y + l * CELL, Math.max(0, w - CELL), 1); // faint text lines
+      }
+      ctx.globalAlpha = 1;
+    }
+    function frame(now) { if (stopped) return; paint(now, true); raf = requestAnimationFrame(frame); }
+
+    build();
+    var still = global.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var onResize = function () { build(); if (still) paint(performance.now(), false); };
+    global.addEventListener('resize', onResize);
+    if (still) paint(performance.now(), false); else raf = requestAnimationFrame(frame);
+
+    return {
+      stop: function () { stopped = true; cancelAnimationFrame(raf); global.removeEventListener('resize', onResize); },
+      pause: function () { stopped = true; cancelAnimationFrame(raf); },
+      resume: function () { if (!stopped) return; stopped = false; if (!still) raf = requestAnimationFrame(frame); }
+    };
+  }
+
+  global.Pixel = { mountAvatar: mountAvatar, mountDust: mountDust, mountLibrary: mountLibrary, sheets: SHEETS };
 })(window);

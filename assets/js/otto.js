@@ -39,13 +39,58 @@
   }
   function motionOff() { return document.body.classList.contains('no-motion') || global.matchMedia('(prefers-reduced-motion: reduce)').matches; }
 
-  var prefs = { voice: true, seen: false };
+  var prefs = { voice: true, seen: false, lang: /^ar/i.test(navigator.language || '') ? 'ar' : 'en' };
   try { prefs = Object.assign(prefs, JSON.parse(localStorage.getItem(KEY)) || {}); } catch (e) {}
   function savePrefs() { try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch (e) {} }
 
+  /* ---------------- language ----------------
+     Otto speaks English and Arabic. The toggle sets a default; a
+     message written in the other script switches for that message
+     (and the agent session) automatically. */
+  function hasArabic(s) { return /[\u0600-\u06FF]/.test(String(s || '')); }
+  function hasLatin(s) { return /[A-Za-z]{2,}/.test(String(s || '')); }
+  function langOf(text) { return hasArabic(text) ? 'ar' : hasLatin(text) ? 'en' : prefs.lang; }
+  var UI = {
+    en: {
+      greetShelf: 'Hoot. Ask me about your shelf, what to read next, or how anything here works.',
+      greetEmpty: 'Hoot. I am Otto, the archivist. Ask me how scanning works, or what happens offline.',
+      placeholder: 'Ask about your shelf, or the app…',
+      thinking: 'Otto is thinking…', speaking: 'Speaking…', listening: 'Listening…', connecting: 'Connecting the line…',
+      muted: 'Otto is muted.', unmuted: 'Otto will speak.', micOff: 'Microphone permission is off.', noCall: 'Could not start the call. Try typing.',
+      note: 'Questions I cannot answer here go to the ElevenLabs agent.',
+      fallback: 'I am not sure about that one. Try a few plain words, or pick a topic below.',
+      offlineAgent: 'I can answer that when there is a connection. Meanwhile, ask me about your shelf or the app.',
+      startersShelf: ['How many books do I have?', 'What should I read next?', 'What am I reading now?', 'Does Spine work offline?'],
+      startersEmpty: ['How do I scan a book?', 'Does Spine work offline?', 'The camera does not open.', 'How do I install on iPhone?'],
+      st: { want: 'to read', reading: 'reading', read: 'finished', pending: 'waiting for a signal' }
+    },
+    ar: {
+      greetShelf: 'هوت. اسألني عن رفّك، أو ماذا تقرأ بعد ذلك، أو كيف يعمل أي شيء هنا.',
+      greetEmpty: 'هوت. أنا أوتو، أمين المكتبة. اسألني كيف يعمل المسح، أو ماذا يحدث بدون إنترنت.',
+      placeholder: 'اسأل عن رفّك أو عن التطبيق…',
+      thinking: 'أوتو يفكّر…', speaking: 'يتحدّث…', listening: 'أستمع…', connecting: 'جارٍ الاتصال…',
+      muted: 'أوتو صامت.', unmuted: 'سيتحدّث أوتو.', micOff: 'إذن الميكروفون مغلق.', noCall: 'تعذّر بدء المكالمة. جرّب الكتابة.',
+      note: 'الأسئلة التي لا أستطيع الإجابة عنها هنا تذهب إلى وكيل ElevenLabs.',
+      fallback: 'لست متأكدًا من ذلك. جرّب كلمات أبسط، أو اختر موضوعًا من الأسفل.',
+      offlineAgent: 'أستطيع الإجابة عن ذلك عند توفر الاتصال. في الوقت الحالي اسألني عن رفّك أو عن التطبيق.',
+      startersShelf: ['كم كتابًا لديّ؟', 'ماذا أقرأ بعد ذلك؟', 'ماذا أقرأ الآن؟', 'هل يعمل التطبيق بدون إنترنت؟'],
+      startersEmpty: ['كيف أمسح كتابًا؟', 'هل يعمل التطبيق بدون إنترنت؟', 'الكاميرا لا تعمل', 'كيف أثبّت التطبيق على آيفون؟'],
+      st: { want: 'للقراءة', reading: 'قيد القراءة', read: 'منتهٍ', pending: 'بانتظار الاتصال' }
+    }
+  };
+  function ui(k, l) { return UI[l || prefs.lang][k]; }
+  function applyLang(l) {
+    prefs.lang = l; savePrefs();
+    var panel = $('#otto-panel'); if (!panel) return;
+    panel.setAttribute('dir', l === 'ar' ? 'rtl' : 'ltr');
+    panel.setAttribute('lang', l);
+    $('#otto-lang').textContent = l === 'ar' ? 'ع' : 'EN';
+    $('#otto-input').placeholder = ui('placeholder', l);
+  }
+
   var avatar = null, fabAvatar = null, isOpen = false, greeted = false;
   var rec = null, listening = false;
-  var conv = null, convStarting = null, convVoice = false, pendingReply = null;
+  var conv = null, convStarting = null, convVoice = false, pendingReply = null, convLang = 'en';
   var greetingGuard = false, greetingRelease = null;
   function afterGreeting() {
     if (!greetingGuard) return Promise.resolve();
@@ -85,11 +130,9 @@
     if (best && bestScore >= 2) return { text: best.a, chips: related(best) };
     return null;
   }
-  function starters() {
+  function starters(l) {
     var has = global.Shelf && global.Shelf.count();
-    return has
-      ? ['How many books do I have?', 'What should I read next?', 'What am I reading now?', 'Does Spine work offline?']
-      : ['How do I scan a book?', 'Does Spine work offline?', 'The camera does not open.', 'How do I install on iPhone?'];
+    return ui(has ? 'startersShelf' : 'startersEmpty', l);
   }
   function related(item) {
     var out = [];
@@ -178,7 +221,7 @@
       var f = S.list('read');
       return { text: f.count ? 'Finished: ' + titleList(f.books, 8) + '.' : 'You have not marked any book as Finished yet.', chips: ['How many books do I have?'] };
     }
-    if (/\b(what|which) books? (do i have|are on my shelf|is on my shelf|have i got|did i scan|are in my library)|\blist (my|all) books\b|\bwhat s on my shelf\b|\bwhat is on my shelf\b/.test(q)) {
+    if (/\b(what|which) books? (do i|have i|are|is|did i)\b|\b(list|show|name) (me )?(my|all|the) books\b|\bwhat( i)?s on my shelf\b|\bwhat is on my shelf\b|\bmy books\b|\bbooks (i|that i) (have|own)\b|\bwhat (do|have) i (have|got|own)\b/.test(q) && !/\b(read next|should)\b/.test(q)) {
       var all = S.list('all');
       return { text: all.count ? 'You have ' + plural(all.count, 'book') + '. Newest first: ' + titleList(all.books, 8) + '.' : 'Your shelf is empty so far.', chips: ['How many have I finished?'] };
     }
@@ -208,30 +251,105 @@
     return null;
   }
 
+  /* ---- the same shelf questions, asked in Arabic ---- */
+  function arList(books, max) {
+    var names = books.slice(0, max || 6).map(function (b) { return b.title + (b.author ? ' لـ' + b.author.split(',')[0] : ''); });
+    var rest = books.length - names.length;
+    return names.join('؛ ') + (rest > 0 ? '؛ و' + rest + ' غيرها' : '');
+  }
+  function arBook(b, aspect) {
+    var st = UI.ar.st[b.status] || b.statusLabel;
+    switch (aspect) {
+      case 'author': return b.author ? ('كتاب ' + b.title + ' من تأليف ' + b.author + '.') : ('لا يوجد مؤلف مسجّل لكتاب ' + b.title + '.');
+      case 'year':
+        if (b.firstPublished && b.year && b.firstPublished !== b.year) return 'صدر ' + b.title + ' أول مرة سنة ' + b.firstPublished + '، ونسختك من سنة ' + b.year + (b.publisher ? ' عن ' + b.publisher : '') + '.';
+        var y = b.firstPublished || b.year;
+        return y ? ('نُشر ' + b.title + ' سنة ' + y + (b.publisher ? ' عن ' + b.publisher : '') + '.') : ('لا أعرف سنة نشر ' + b.title + '.');
+      case 'pages': return b.pages ? ('يحتوي ' + b.title + ' على ' + b.pages + ' صفحة.') : ('لا يوجد عدد صفحات مسجّل لكتاب ' + b.title + '.');
+      case 'about': return b.description ? (b.title + ': ' + b.description.slice(0, 300).replace(/\s+\S*$/, '') + '…') : ('لا يوجد ملخص لكتاب ' + b.title + '. هو من تأليف ' + (b.author || 'مؤلف غير معروف') + '.');
+      case 'status': return 'كتاب ' + b.title + ' مسجّل عندك على أنه ' + st + '.';
+      default: return 'نعم، ' + b.title + ' على رفّك، حالته: ' + st + '. من تأليف ' + (b.author || 'مؤلف غير معروف') + ((b.firstPublished || b.year) ? '، نُشر سنة ' + (b.firstPublished || b.year) : '') + (b.pages ? '، ' + b.pages + ' صفحة' : '') + '.';
+    }
+  }
+  function arTitle(q) {
+    return q.replace(/(من كتب|من مؤلف|من هو مؤلف|مؤلف|كاتب|متى (نشر|نُشر|صدر)|سنة (النشر|الإصدار)|كم صفحة|عدد صفحات|عن ماذا|ما قصة|ملخص|هل (لدي|عندي|أملك)|كتاب|رواية|يتحدث|أخبرني عن|مشابه|شبيه|اقترح|رشح|مثل|لي|عن|في)/g, ' ').replace(/[؟?.!،,]/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  function shelfAnswerAr(question) {
+    if (!global.Shelf) return null;
+    var S = global.Shelf, q = String(question || '').replace(/\s+/g, ' ').trim();
+    var n = function (x) { return x; };
+    if (/كم (عدد )?(ال)?كتب|كم كتاب|عدد (ال)?كتب|كم (ال)?كتاب/.test(q)) {
+      var s = S.summary();
+      if (!s.total && !s.pending) return { text: 'رفّك فارغ حتى الآن. امسح باركود كتاب لإضافة أول كتاب.', chips: starters('ar') };
+      if (/(أنهيت|انهيت|قرأت|قرات|منتهي|مكتمل)/.test(q)) return { text: 'أنهيت ' + s.finished + ' من أصل ' + s.total + ' كتاب' + (s.pagesRead ? '، أي ' + s.pagesRead.toLocaleString('ar') + ' صفحة مقروءة' : '') + '.', chips: starters('ar') };
+      if (/(متبق|باقي|بقي|لم أقرأ|لم اقرأ|للقراءة)/.test(q)) return { text: 'بقي لك ' + s.toRead + ' كتاب للقراءة' + (s.reading ? ' و' + s.reading + ' قيد القراءة' : '') + (s.pagesToRead ? '، نحو ' + s.pagesToRead.toLocaleString('ar') + ' صفحة' : '') + '.', chips: starters('ar') };
+      if (/(أقرأ|اقرا|قيد القراءة|حالي)/.test(q)) return { text: s.reading ? 'تقرأ الآن ' + s.reading + ' كتاب: ' + arList(s.readingNow) + '.' : 'لا يوجد كتاب مسجّل على أنه قيد القراءة الآن.', chips: starters('ar') };
+      return { text: 'لديك ' + s.total + ' كتاب على رفّك: ' + s.finished + ' منتهٍ، ' + s.reading + ' قيد القراءة، و' + s.toRead + ' للقراءة' + (s.pending ? '، إضافة إلى ' + s.pending + ' مسح بانتظار الاتصال' : '') + '.', chips: starters('ar') };
+    }
+    if (/(ماذا|ما الذي|ايش|أيش) أقرأ الآن|أقرأ (الآن|حاليا|حالياً)|قيد القراءة/.test(q) && !/بعد/.test(q)) {
+      var r = S.list('reading');
+      return { text: r.count ? 'تقرأ الآن ' + arList(r.books) + '.' : 'لا يوجد كتاب مسجّل على أنه قيد القراءة. افتح كتابًا واضغط «Reading».', chips: starters('ar') };
+    }
+    if (/(ما هي|ماهي|ما|أي|اي|اعرض|أعرض|اذكر) (كتبي|الكتب (التي|اللي) (عندي|لدي|أملك)|كتب (عندي|لدي))|كتبي|الكتب (التي|اللي) (عندي|لدي)|ماذا (لدي|عندي)/.test(q)) {
+      var all = S.list('all');
+      return { text: all.count ? 'لديك ' + all.count + ' كتاب. الأحدث أولًا: ' + arList(all.books, 8) + '.' : 'رفّك فارغ حتى الآن.', chips: starters('ar') };
+    }
+    if (/(المنتهية|التي أنهيت|اللي خلصت|ماذا (قرأت|أنهيت))/.test(q)) {
+      var f = S.list('read');
+      return { text: f.count ? 'الكتب المنتهية: ' + arList(f.books, 8) + '.' : 'لم تسجّل أي كتاب على أنه منتهٍ بعد.', chips: starters('ar') };
+    }
+    if (/(آخر|اخر|أحدث|احدث) (كتاب|مسح|إضافة)/.test(q)) {
+      var nw = S.summary().newest;
+      return nw ? { text: 'أحدث كتاب على الرف هو ' + nw.title + (nw.author ? ' لـ' + nw.author : '') + '.', chips: starters('ar') } : null;
+    }
+    var aspect = null;
+    if (/(من كتب|من مؤلف|من هو مؤلف|مؤلف|كاتب)/.test(q)) aspect = 'author';
+    else if (/(متى (نشر|نُشر|صدر)|سنة (النشر|الإصدار)|أي سنة|اي سنة)/.test(q)) aspect = 'year';
+    else if (/(كم صفحة|عدد (ال)?صفحات)/.test(q)) aspect = 'pages';
+    else if (/(عن ماذا|ما قصة|ملخص|يتحدث عن|أخبرني عن)/.test(q)) aspect = 'about';
+    else if (/(هل (قرأت|أنهيت)|حالة)/.test(q)) aspect = 'status';
+    var t = arTitle(q);
+    if (t.length >= 2) {
+      var hits = S.find(t, 3);
+      if (hits.length && (hits[0].score >= 55 || (aspect && hits[0].score >= 30))) {
+        return { text: arBook(hits[0].book, aspect || 'have'), chips: ['من كتب ' + hits[0].book.title + '؟', 'متى نُشر ' + hits[0].book.title + '؟', 'كتاب مشابه لـ' + hits[0].book.title] };
+      }
+      if (aspect || /(هل (لدي|عندي|أملك))/.test(q)) {
+        return { text: S.count() ? 'لا أجد «' + t + '» على رفّك. أعرف فقط الكتب التي مسحتها، فجرّب العنوان كما هو مكتوب على الغلاف، أو امسحه أولًا.' : 'رفّك فارغ، لذلك لا أجد هذا الكتاب. امسحه ثم اسألني مجددًا.', chips: starters('ar') };
+      }
+    }
+    void n;
+    return null;
+  }
+  function isRecommendAskAr(q) { return /(اقترح|اقتراح|توصي|توصية|توصيات|رشح|ترشيح|مشابه|شبيه|ماذا أقرأ بعد|ايش اقرأ بعد|كتاب آخر|أفكار للقراءة)/.test(q); }
+
   /* ---- recommendations: books that share a subject with the shelf ---- */
   function isRecommendAsk(q) {
     return /\b(recommend|suggest|similar|something like|what (should|could|can) i read|read next|what next|more like|books like|anything like|next book|another suggestion)\b/.test(q);
   }
-  function recommend(question) {
-    var q = norm(question);
+  function recommend(question, l) {
+    l = l || 'en';
+    var ar = l === 'ar';
+    var q = ar ? String(question || '') : norm(question);
     var S = global.Shelf;
     if (!S) return Promise.resolve(null);
-    if (!S.count()) return Promise.resolve({ text: 'Scan a few books first and I will find more along the same lines.', chips: ['How do I scan a book?'] });
-    if (!navigator.onLine) return Promise.resolve({ text: 'Recommendations need a connection to the catalogue. Ask me again when you are back online.', chips: [] });
+    if (!S.count()) return Promise.resolve({ text: ar ? 'امسح بضعة كتب أولًا وسأجد لك ما يشبهها.' : 'Scan a few books first and I will find more along the same lines.', chips: starters(l) });
+    if (!navigator.onLine) return Promise.resolve({ text: ar ? 'التوصيات تحتاج اتصالًا بالفهرس. اسألني مجددًا عند عودة الاتصال.' : 'Recommendations need a connection to the catalogue. Ask me again when you are back online.', chips: [] });
     var seed = null;
-    var t = extractTitle(q);
+    var t = ar ? arTitle(q) : extractTitle(q);
     if (t.length >= 3) { var hit = S.find(t, 1)[0]; if (hit && hit.score >= 40) seed = hit.book; }
     return S.recommend(seed ? seed.id : null).then(function (res) {
-      if (!res || !res.books.length) return { text: 'I could not find anything close enough in the catalogue just now. Try naming a book: "something like Dune".', chips: [] };
-      var lead = seed
-        ? 'If you liked ' + seed.title + ', these share its shelf: '
-        : 'Going by what you read (' + res.subjects.slice(0, 2).join(', ') + '), you might like: ';
+      if (!res || !res.books.length) return { text: ar ? 'لم أجد شيئًا قريبًا بما يكفي في الفهرس الآن. جرّب تسمية كتاب: «كتاب مشابه لـ Dune».' : 'I could not find anything close enough in the catalogue just now. Try naming a book: "something like Dune".', chips: [] };
+      var list = res.books.map(function (b) { return b.title + (b.author ? (ar ? ' لـ' : ' by ') + b.author : '') + (b.year ? ' (' + b.year + ')' : ''); }).join(ar ? '؛ ' : '; ');
+      var lead = ar
+        ? (seed ? 'إن أعجبك ' + seed.title + '، فهذه الكتب تشاركه الرف: ' : 'بناءً على ما تقرأ (' + res.subjects.slice(0, 2).join('، ') + ')، قد يعجبك: ')
+        : (seed ? 'If you liked ' + seed.title + ', these share its shelf: ' : 'Going by what you read (' + res.subjects.slice(0, 2).join(', ') + '), you might like: ');
       return {
-        text: lead + res.books.map(function (b) { return b.title + (b.author ? ' by ' + b.author : '') + (b.year ? ' (' + b.year + ')' : ''); }).join('; ') + '.',
+        text: lead + list + '.',
         recs: res.books,
-        chips: ['Another suggestion', seed ? 'What is ' + seed.title + ' about?' : 'What am I reading now?']
+        chips: ar ? ['اقتراح آخر', seed ? 'عن ماذا يتحدث ' + seed.title + '؟' : 'ماذا أقرأ الآن؟'] : ['Another suggestion', seed ? 'What is ' + seed.title + ' about?' : 'What am I reading now?']
       };
-    }).catch(function () { return { text: 'The catalogue did not answer in time. Try again in a moment.', chips: [] }; });
+    }).catch(function () { return { text: ar ? 'لم يجب الفهرس في الوقت المناسب. حاول بعد قليل.' : 'The catalogue did not answer in time. Try again in a moment.', chips: [] }; });
   }
 
   /* =======================================================
@@ -282,8 +400,12 @@
      ======================================================= */
   function canListen() { return !!(global.SpeechRecognition || global.webkitSpeechRecognition); }
   function canSpeak() { return 'speechSynthesis' in global; }
-  function pickVoice() {
+  function pickVoice(l) {
     var vs = speechSynthesis.getVoices();
+    if (l === 'ar') {
+      return vs.filter(function (x) { return /^ar/i.test(x.lang) && /Google|Microsoft Hamed|Microsoft Naayf|Maged|Tarik/i.test(x.name); })[0] ||
+             vs.filter(function (x) { return /^ar/i.test(x.lang); })[0] || null;
+    }
     var pref = ['Google UK English Male', 'Daniel', 'Google US English', 'Microsoft George', 'Samantha'];
     for (var i = 0; i < pref.length; i++) {
       var v = vs.filter(function (x) { return x.name.indexOf(pref[i]) === 0; })[0];
@@ -294,12 +416,15 @@
   function say(text) {
     if (!prefs.voice || !canSpeak() || convVoice) return;
     try { speechSynthesis.cancel(); } catch (e) {}
+    var l = langOf(text);
     var u = new SpeechSynthesisUtterance(text);
-    var v = pickVoice();
+    var v = pickVoice(l);
     if (v) u.voice = v;
+    u.lang = l === 'ar' ? 'ar-SA' : 'en-GB';
     u.rate = 1.0; u.pitch = 1.1;
-    u.onstart = function () { if (avatar) avatar.talking(true); status('Speaking…'); };
-    u.onend = u.onerror = function () { if (avatar) avatar.talking(false); if (status() === 'Speaking…') status(''); };
+    var sp = ui('speaking', l);
+    u.onstart = function () { if (avatar) avatar.talking(true); status(sp); };
+    u.onend = u.onerror = function () { if (avatar) avatar.talking(false); if (status() === sp) status(''); };
     speechSynthesis.speak(u);
   }
   function hush() {
@@ -311,10 +436,10 @@
     if (!SR) { status('Voice input is not available here. Type instead.'); return; }
     hush();
     rec = new SR();
-    rec.lang = (navigator.language || 'en').indexOf('en') === 0 ? navigator.language : 'en-GB';
+    rec.lang = prefs.lang === 'ar' ? 'ar-SA' : ((navigator.language || 'en').indexOf('en') === 0 ? navigator.language : 'en-GB');
     rec.interimResults = true;
     var finalText = '';
-    rec.onstart = function () { listening = true; $('#otto-mic').setAttribute('aria-pressed', 'true'); status('Listening…'); };
+    rec.onstart = function () { listening = true; $('#otto-mic').setAttribute('aria-pressed', 'true'); status(ui('listening')); };
     rec.onresult = function (e) {
       var interim = '';
       for (var i = e.resultIndex; i < e.results.length; i++) {
@@ -326,7 +451,7 @@
     rec.onend = function () {
       listening = false;
       $('#otto-mic').setAttribute('aria-pressed', 'false');
-      if (finalText.trim()) send(finalText.trim()); else if (status() === 'Listening…') status('');
+      if (finalText.trim()) send(finalText.trim()); else if (status() === ui('listening')) status('');
     };
     try { rec.start(); } catch (e) { status('Could not start the microphone.'); }
   }
@@ -359,11 +484,12 @@
     };
   }
 
-  function startConversation(voice) {
-    if (conv && convVoice === voice) return Promise.resolve(conv);
+  function startConversation(voice, l) {
+    l = l || prefs.lang;
+    if (conv && convVoice === voice && convLang === l) return Promise.resolve(conv);
     if (convStarting) return convStarting;
     var teardown = conv ? endConversation() : Promise.resolve();
-    status(voice ? 'Connecting the line…' : 'Otto is thinking…');
+    status(voice ? ui('connecting', l) : ui('thinking', l));
     greetingGuard = !voice; greetingRelease = null;
     convStarting = teardown.then(function () { return import(ELEVENLABS.clientSrc); }).then(function (mod) {
       var Conversation = mod.Conversation;
@@ -372,9 +498,10 @@
         agentId: ELEVENLABS.agentId,
         connectionType: 'websocket',
         textOnly: !voice,
+        overrides: l === 'ar' ? { agent: { language: 'ar' } } : undefined,
         clientTools: clientTools(),
         dynamicVariables: s ? { book_count: s.total, finished_count: s.finished, reading_count: s.reading, to_read_count: s.toRead, pages_read: s.pagesRead } : {},
-        onConnect: function () { status(voice ? 'Listening…' : ''); },
+        onConnect: function () { status(voice ? ui('listening', l) : ''); },
         onDisconnect: function () {
           conv = null; convVoice = false;
           if (avatar) avatar.talking(false);
@@ -386,7 +513,7 @@
         onModeChange: function (m) {
           var mode = m && m.mode;
           if (avatar) avatar.talking(mode === 'speaking');
-          if (voice) status(mode === 'speaking' ? 'Otto is speaking…' : mode === 'listening' ? 'Listening…' : '');
+          if (voice) status(mode === 'speaking' ? ui('speaking', l) : mode === 'listening' ? ui('listening', l) : '');
         },
         onMessage: function (m) {
           if (!m || !m.message) return;
@@ -399,13 +526,13 @@
           if (pendingReply) { clearTimeout(pendingReply.timer); pendingReply = null; }
           if (avatar) avatar.hop();
           bubble(m.message, 'otto');
-          chips(voice ? [] : starters().slice(0, 2));
+          chips(voice ? [] : starters(l).slice(0, 2));
           if (!voice) say(m.message);
-          if (voice) status('Otto is speaking…');
+          if (voice) status(ui('speaking', l));
         }
       });
     }).then(function (c) {
-      conv = c; convVoice = voice; convStarting = null;
+      conv = c; convVoice = voice; convLang = l; convStarting = null;
       if (c.setVolume) { try { c.setVolume({ volume: prefs.voice ? 1 : 0 }); } catch (e) {} }
       return c;
     }).catch(function (e) {
@@ -431,34 +558,38 @@
     if (!text) return;
     $('#otto-input').value = '';
     hush();
+    var l = langOf(text);
+    if (l !== prefs.lang) applyLang(l);   // writing in the other script switches Otto
     bubble(text, 'me');
     chips([]);
     var q = norm(text);
 
     if (conv && convVoice) { conv.sendUserMessage(text); return; }
 
-    var local = shelfAnswer(text);
+    var local = l === 'ar' ? shelfAnswerAr(text) : shelfAnswer(text);
     if (local) { typing(true); setTimeout(function () { ottoSays(local); }, 220); return; }
-    if (isRecommendAsk(q)) { typing(true); recommend(text).then(function (r) { ottoSays(r || answer(text) || fallback()); }); return; }
+    var wantsRec = l === 'ar' ? isRecommendAskAr(text) : isRecommendAsk(q);
+    if (wantsRec) { typing(true); recommend(text, l).then(function (r) { ottoSays(r || fallback(l)); }); return; }
 
+    var faq = l === 'ar' ? null : answer(text);   // the FAQ is English; Arabic goes to the agent
     if (agentReady()) {
       typing(true);
-      startConversation(false).then(function (c) {
+      startConversation(false, l).then(function (c) {
         return afterGreeting().then(function () {
           c.sendUserMessage(text);
           pendingReply = { timer: setTimeout(function () {
             pendingReply = null;
-            ottoSays(answer(text) || fallback());
+            ottoSays(faq || fallback(l));
           }, ELEVENLABS.replyTimeout) };
         });
-      }).catch(function () { ottoSays(answer(text) || fallback()); });
+      }).catch(function () { ottoSays(faq || fallback(l)); });
       return;
     }
     typing(true);
-    setTimeout(function () { ottoSays(answer(text) || fallback()); }, 260);
+    setTimeout(function () { ottoSays(faq || (l === 'ar' && ELEVENLABS.agentId ? { text: ui('offlineAgent', 'ar'), chips: starters('ar') } : fallback(l))); }, 260);
   }
-  function fallback() {
-    return { text: 'I am not sure about that one. Try a few plain words, or pick a topic below.', chips: starters() };
+  function fallback(l) {
+    return { text: ui('fallback', l), chips: starters(l) };
   }
 
   /* =======================================================
@@ -474,18 +605,19 @@
     if (!avatar) avatar = global.Pixel.mountAvatar($('#otto-cv'), { still: motionOff() });
     avatar.pose('wave'); avatar.hop();
     setTimeout(function () { if (avatar) avatar.pose('idle'); }, 1400);
+    applyLang(prefs.lang);
     $('#otto-voice').setAttribute('aria-pressed', prefs.voice ? 'true' : 'false');
     $('#otto-mic').hidden = !(agentReady() || canListen());
     if (!greeted) {
       greeted = true;
       var has = global.Shelf && global.Shelf.count();
-      bubble(has ? 'Hoot. Ask me about your shelf, what to read next, or how anything here works.' : 'Hoot. I am Otto, the archivist. Ask me how scanning works, or what happens offline.', 'otto');
+      bubble(ui(has ? 'greetShelf' : 'greetEmpty'), 'otto');
       chips(starters());
       if (!prefs.seen && ELEVENLABS.agentId && ELEVENLABS.mode === 'client') {
-        var note = 'Questions I cannot answer here go to the ElevenLabs agent.';
+        var note = ui('note');
         status(note);
         prefs.seen = true; savePrefs();
-        setTimeout(function () { if (status() === note) status(''); }, 5000);
+        setTimeout(function () { if (status() === note) status(''); }, 4000);
       }
     }
     setTimeout(function () { if (matchMedia('(min-width: 640px)').matches) $('#otto-input').focus(); }, 380);
@@ -501,6 +633,18 @@
     if (avatar) { avatar.stop(); avatar = null; }
   }
   function toggle() { if (isOpen) close(); else open(); }
+  function setLang(l) {
+    l = l === 'ar' ? 'ar' : 'en';
+    if (l === prefs.lang) return l;
+    hush(); stopListening(); endConversation();
+    applyLang(l);
+    if (isOpen) {
+      if (avatar) avatar.hop();
+      bubble(ui('greetShelf', l), 'otto');
+      chips(starters(l));
+    }
+    return l;
+  }
 
   /* =======================================================
      Widget mode (optional): the official ElevenLabs bubble
@@ -539,9 +683,10 @@
       this.setAttribute('aria-pressed', prefs.voice ? 'true' : 'false');
       if (!prefs.voice) hush();
       if (conv && conv.setVolume) { try { conv.setVolume({ volume: prefs.voice ? 1 : 0 }); } catch (e) {} }
-      status(prefs.voice ? 'Otto will speak.' : 'Otto is muted.');
+      status(prefs.voice ? ui('unmuted') : ui('muted'));
       setTimeout(function () { status(''); }, 1500);
     };
+    $('#otto-lang').onclick = function () { setLang(prefs.lang === 'ar' ? 'en' : 'ar'); };
     $('#otto-mic').onclick = function () {
       if (agentReady()) {
         if (conv && convVoice) { endConversation(); status(''); return; }
@@ -550,7 +695,7 @@
         startConversation(true).catch(function (e) {
           $('#otto-panel').classList.remove('is-voice');
           $('#otto-mic').setAttribute('aria-pressed', 'false');
-          status(/NotAllowed|Permission/i.test(String(e && (e.name || e.message))) ? 'Microphone permission is off.' : 'Could not start the call. Try typing.');
+          status(/NotAllowed|Permission/i.test(String(e && (e.name || e.message))) ? ui('micOff') : ui('noCall'));
         });
         return;
       }
@@ -571,6 +716,7 @@
     open: open, close: close, toggle: toggle,
     isOpen: function () { return isOpen; },
     onRoute: function (page) { if (page === 'scan' && isOpen) close(); if (widgetEl) widgetEl.style.display = page === 'scan' ? 'none' : ''; },
+    lang: function () { return prefs.lang; }, setLang: setLang, shelfAnswerAr: shelfAnswerAr,
     answer: answer, shelfAnswer: shelfAnswer, recommend: recommend, clientTools: clientTools,
     config: ELEVENLABS
   };
