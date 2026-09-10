@@ -76,6 +76,25 @@ The first time the camera opens, the browser (or the wrapper) shows the
 permission prompt. The app explains every denial state in plain language and
 offers "Type an ISBN instead" as a way through.
 
+### Publishing the APK so the in-app QR code works
+
+The intro screen and Settings have a **Get the app** button that shows a QR
+code and link. The Android link points at
+`https://github.com/Sultan-AlKaabi-hub/app/releases/latest/download/spine.apk`,
+which GitHub resolves to the newest release asset with that name. To make it
+live:
+
+1. Download the APK from Median and rename it to exactly `spine.apk`.
+2. On GitHub: **Releases → Draft a new release**. Tag it (for example
+   `v1.1.2`), attach `spine.apk`, publish.
+3. Every later build: draft a new release, attach the new `spine.apk`. The
+   link and the QR code never need to change.
+
+The iPhone panel points at the site itself, because iOS installs web apps
+through Safari's **Share → Add to Home Screen** and cannot sideload a package.
+To point the Android link somewhere else (a Median-hosted URL, say), change
+`SHARE.apk` at the top of `assets/js/app.js` and bump `VERSION` in `sw.js`.
+
 ### If the APK says it has no camera permission and never asks
 
 That means the wrapper itself was built without the camera permission, so

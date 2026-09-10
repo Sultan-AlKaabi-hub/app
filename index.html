@@ -42,6 +42,10 @@
     <div class="intro__actions">
       <button class="btn btn--primary" id="intro-start">Start scanning</button>
       <button class="btn btn--ghost" id="intro-tour">Show me how it works</button>
+      <button class="btn btn--ghost btn--sm" id="intro-getapp">
+        <svg viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2v2h-2zM14 18h2v2h-2zM18 18h2v2h-2z"/></svg>
+        Get the app on your phone
+      </button>
       <button class="btn btn--ghost btn--sm" id="intro-install" hidden>
         <svg viewBox="0 0 24 24" aria-hidden="true" style="width:18px;height:18px"><path d="M12 4v11M7 10l5 5 5-5M5 19h14"/></svg>
         Install on this phone
@@ -197,6 +201,8 @@
     <div class="rows">
       <button class="row row--btn" id="set-install" hidden><span><b>Install Spine</b><small>Full screen, on your home screen, no browser bar</small></span>
         <svg class="row__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 19h14"/></svg></button>
+      <button class="row row--btn" id="set-getapp"><span><b>Get the app on another phone</b><small>QR code and links for Android and iPhone</small></span>
+        <svg class="row__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
       <button class="row row--btn" id="set-offline"><span><b>Prepare for offline</b><small id="set-offline-sub">Downloads the scan engines once, so scanning works without a signal</small></span>
         <svg class="row__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
       <label class="row"><span><b>Vibrate on a match</b><small>A short pulse when a book locks on</small></span>
@@ -249,6 +255,29 @@
 </article>
 </div>
 
+<!-- ============ GET THE APP ============ -->
+<div class="sheet" id="getapp" hidden role="dialog" aria-modal="true" aria-label="Get the app">
+  <div class="sheet__scrim" data-close="getapp"></div>
+  <article class="sheet__panel sheet__panel--short" tabindex="-1">
+    <button class="sheet__grip" data-close="getapp" aria-label="Close"></button>
+    <h3 class="sheet__h">Get Spine on a phone</h3>
+    <div class="seg" role="tablist" aria-label="Platform" data-os="android">
+      <span class="seg__pill" aria-hidden="true"></span>
+      <button role="tab" class="seg__opt is-on" data-os="android" aria-selected="true">Android</button>
+      <button role="tab" class="seg__opt" data-os="ios" aria-selected="false">iPhone</button>
+    </div>
+    <div class="qrwrap">
+      <div class="qrframe"><canvas id="qr" width="232" height="232" aria-label="QR code" role="img"></canvas></div>
+      <p class="qr__cap" id="qr-cap"></p>
+    </div>
+    <ol class="steps" id="qr-steps"></ol>
+    <div class="qr__acts">
+      <a class="btn btn--primary btn--sm" id="qr-link" href="#" target="_blank" rel="noopener">Open link</a>
+      <button class="btn btn--ghost btn--sm" id="qr-copy">Copy link</button>
+    </div>
+  </article>
+</div>
+
 <!-- ============ CONFIRM ============ -->
 <div class="sheet" id="confirm" hidden role="alertdialog" aria-modal="true" aria-labelledby="confirm-h">
   <div class="sheet__scrim" data-close="confirm"></div>
@@ -277,6 +306,7 @@
 <div class="flash" id="flash" aria-hidden="true"></div>
 <div class="pageturn" id="pageturn" aria-hidden="true"></div>
 
+<script src="./assets/js/qr.js"></script>
 <script src="./assets/js/pixel.js"></script>
 <script src="./assets/js/api.js"></script>
 <script src="./assets/js/scanner.js"></script>

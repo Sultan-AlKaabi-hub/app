@@ -7,7 +7,16 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.1.1';
+  var VERSION = '1.1.2';
+
+  // Where the app lives and where the Android package is published.
+  // The APK URL follows the GitHub Releases convention: upload the file
+  // Median produces as an asset named spine.apk on any release and this
+  // link always points at the newest one.
+  var SHARE = {
+    site: 'https://sultan-alkaabi-hub.github.io/app/',
+    apk: 'https://github.com/Sultan-AlKaabi-hub/app/releases/latest/download/spine.apk'
+  };
   var KEY = 'spine.shelf.v1';
   var KEY_SET = 'spine.settings.v1';
   var KEY_TOUR = 'spine.tour.v1';
@@ -557,7 +566,7 @@
     if (current === 'scan' && !scanning) setMode(mode, true);
   }
   function overlayOpen() {
-    return !$('#sheet').hidden || !$('#manual').hidden || !$('#confirm').hidden || !$('#lookup').hidden;
+    return !$('#sheet').hidden || !$('#manual').hidden || !$('#confirm').hidden || !$('#getapp').hidden || !$('#lookup').hidden;
   }
 
   function setMode(m, force) {
@@ -1095,6 +1104,54 @@
   }
 
   /* =======================================================
+     Get the app: QR code + links per platform
+     ======================================================= */
+  var qrOs = /iPad|iPhone|iPod/.test(navigator.userAgent) ? 'ios' : 'android';
+
+  function drawQr(canvas, text) {
+    if (!window.qrcode) return;
+    var q = window.qrcode(0, 'M');
+    q.addData(text);
+    q.make();
+    var n = q.getModuleCount(), quiet = 2, cells = n + quiet * 2;
+    var scale = 4;
+    canvas.width = cells * scale; canvas.height = cells * scale;
+    var x = canvas.getContext('2d');
+    x.fillStyle = '#F1EBDC'; x.fillRect(0, 0, canvas.width, canvas.height);
+    x.fillStyle = '#0C1020';
+    for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) {
+      if (q.isDark(r, c)) x.fillRect((c + quiet) * scale, (r + quiet) * scale, scale, scale);
+    }
+  }
+
+  function bare(u) { return u.replace(/^https:\/\//, ''); }
+
+  function renderGetApp() {
+    var isIos = qrOs === 'ios';
+    var url = isIos ? SHARE.site : SHARE.apk;
+    $('.seg').dataset.os = qrOs;
+    $$('.seg__opt').forEach(function (b) {
+      var on = b.dataset.os === qrOs;
+      b.classList.toggle('is-on', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    drawQr($('#qr'), url);
+    $('#qr').setAttribute('aria-label', 'QR code for ' + url);
+    $('#qr-cap').textContent = bare(url);
+    $('#qr-link').href = url;
+    $('#qr-link').textContent = isIos ? 'Open the site' : 'Download APK';
+    $('#qr-steps').innerHTML = isIos
+      ? '<li>Scan the code, or open the link <b>in Safari</b>. Other browsers cannot install.</li>' +
+        '<li>Tap <b>Share</b> (the square with an arrow).</li>' +
+        '<li>Choose <b>Add to Home Screen</b>, then <b>Add</b>.</li>' +
+        '<li>Launch Spine from the home screen and allow the camera when asked.</li>'
+      : '<li>Scan the code, or open the link on the Android phone.</li>' +
+        '<li>Download <b>spine.apk</b>. If asked, allow installs from this source.</li>' +
+        '<li>Open it and tap <b>Install</b>, then allow the camera on first scan.</li>' +
+        '<li>Prefer no download? Open <b>' + esc(bare(SHARE.site)) + '</b> in Chrome and choose <b>Install app</b> from the menu.</li>';
+  }
+
+  /* =======================================================
      Network state
      ======================================================= */
   var netT;
@@ -1227,6 +1284,20 @@
     };
     $('#set-offline').onclick = prepareOffline;
 
+    // Get the app
+    function openGetApp() { renderGetApp(); openSheet('getapp'); }
+    $('#intro-getapp').onclick = openGetApp;
+    $('#set-getapp').onclick = openGetApp;
+    $$('.seg__opt').forEach(function (b) {
+      b.onclick = function () { qrOs = b.dataset.os; renderGetApp(); };
+    });
+    $('#qr-copy').onclick = function () {
+      var url = $('#qr-link').href;
+      var done = function () { toast('Link copied', 'ok'); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, function () { prompt('Copy this link', url); });
+      else prompt('Copy this link', url);
+    };
+
     // Install
     window.addEventListener('beforeinstallprompt', function (e) {
       e.preventDefault();
@@ -1270,6 +1341,7 @@
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
       if (!$('#confirm').hidden) closeSheet('confirm');
+      else if (!$('#getapp').hidden) closeSheet('getapp');
       else if (!$('#sheet').hidden) closeSheet('sheet');
       else if (!$('#manual').hidden) closeSheet('manual');
     });

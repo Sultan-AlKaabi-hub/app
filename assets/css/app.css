@@ -493,6 +493,26 @@ svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .sheet__p{color:var(--muted);font-size:var(--t-sm)}
 .confirm__acts{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3);margin-top:var(--s5)}
 
+/* get-the-app sheet */
+.seg{position:relative;display:grid;grid-template-columns:1fr 1fr;padding:4px;border-radius:999px;background:var(--slate);
+  box-shadow:inset 0 0 0 1px rgba(241,235,220,.12);margin:var(--s4) 0 var(--s5)}
+.seg__pill{position:absolute;top:4px;left:4px;width:calc(50% - 4px);height:calc(100% - 8px);border-radius:999px;background:var(--brass);transition:transform .3s var(--ease-out)}
+.seg[data-os="ios"] .seg__pill{transform:translateX(100%)}
+.seg__opt{position:relative;min-height:40px;border-radius:999px;font-size:var(--t-sm);font-weight:600;color:var(--muted);transition:color .25s}
+.seg__opt.is-on{color:#241703}
+.qrwrap{display:grid;justify-items:center;gap:var(--s3);margin-bottom:var(--s5)}
+.qrframe{position:relative;padding:14px;background:var(--parchment);border-radius:var(--r-md);
+  box-shadow:0 18px 40px -18px rgba(0,0,0,.9), inset 0 0 0 1px rgba(0,0,0,.08);animation:demoIn .45s var(--ease-spring) both}
+.qrframe::before,.qrframe::after{content:"";position:absolute;width:22px;height:22px;border:3px solid var(--brass);pointer-events:none}
+.qrframe::before{top:-6px;left:-6px;border-right:0;border-bottom:0;border-top-left-radius:8px}
+.qrframe::after{bottom:-6px;right:-6px;border-left:0;border-top:0;border-bottom-right-radius:8px}
+#qr{display:block;width:232px;height:232px;image-rendering:pixelated}
+.qr__cap{color:var(--muted);font-size:var(--t-xs);text-align:center;overflow-wrap:anywhere;max-width:38ch;line-height:1.5}
+.steps{margin:0 0 var(--s5);padding:0 0 0 1.4em;color:var(--paper-dim);font-size:var(--t-sm);line-height:1.6;display:grid;gap:var(--s2)}
+.steps b{color:var(--parchment)}
+.qr__acts{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3)}
+.qr__acts .btn{text-decoration:none}
+
 /* book detail */
 .det__glow{position:absolute;top:0;left:0;right:0;height:230px;pointer-events:none;opacity:.5;
   background:radial-gradient(80% 100% at 50% 0%, var(--tint,#5A4B9E), transparent 70%);transition:opacity .6s}
