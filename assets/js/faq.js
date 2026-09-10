@@ -184,6 +184,11 @@
           a: 'Tap the Otto button at the bottom right of the shelf, Reading or Settings pages. Type a question, or hold the microphone button and speak. Otto answers in text and can read the answer aloud. Tap the speaker icon to turn his voice on or off.'
         },
         {
+          q: 'Can Otto tell me about my own books?',
+          k: ['my books', 'how many books', 'how many have i read', 'who wrote', 'about my shelf', 'left to read', 'what am i reading'],
+          a: 'Yes. Ask how many books you have, how many you have finished or still have to read, what you are reading now, or about one book: who wrote it, when it was published, how many pages it has, or what it is about. Otto reads this from the shelf on your device; nothing is uploaded.'
+        },
+        {
           q: 'Otto did not understand my question.',
           k: ['did not understand', 'wrong answer', 'not helpful'],
           a: 'Try asking in a few plain words, for example "camera permission" or "does it work offline". You can also open the full FAQ from Settings, where every topic is listed.'

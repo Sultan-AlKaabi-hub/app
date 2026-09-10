@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.2.1';
+  var VERSION = '1.3.0';
 
   // Where the app lives and where the Android package is published.
   // The APK URL follows the GitHub Releases convention: upload the file
@@ -454,6 +454,7 @@
       publisher: rec.publisher || '',
       publishDate: rec.publishDate || '',
       year: rec.year || null,
+      firstPublished: rec.firstPublished || null,
       pages: rec.pages || null,
       format: rec.format || '',
       subjects: rec.subjects || [],
@@ -787,7 +788,7 @@
             : 'Saved. The full record arrives the moment you are back online.') + '</span></div>'
         : '<div class="facts">' +
             '<div><b>' + (b.pages || '—') + '</b><small>pages</small></div>' +
-            '<div><b>' + (b.year || '—') + '</b><small>published</small></div>' +
+            '<div><b>' + (b.firstPublished || b.year || '—') + '</b><small>' + (b.firstPublished && b.year && b.firstPublished !== b.year ? 'first published' : 'published') + '</small></div>' +
             '<div><b style="font-size:1.05rem">' + since(b.addedAt) + '</b><small>on your shelf</small></div>' +
           '</div>') +
 
@@ -1106,6 +1107,7 @@
             publisher: String(b.publisher || '').slice(0, 200),
             publishDate: String(b.publishDate || '').slice(0, 40),
             year: typeof b.year === 'number' ? b.year : null,
+            firstPublished: typeof b.firstPublished === 'number' ? b.firstPublished : null,
             pages: typeof b.pages === 'number' ? b.pages : null,
             format: String(b.format || '').slice(0, 60),
             subjects: Array.isArray(b.subjects) ? b.subjects.map(String).slice(0, 12) : [],
@@ -1401,6 +1403,104 @@
       });
     }
   }
+
+  /* =======================================================
+     Read-only shelf API for Otto (local chat and ElevenLabs
+     client tools). Never mutates; safe to expose.
+     ======================================================= */
+  function norm(s) { return String(s || '').toLowerCase().replace(/[^\p{L}\p{N} ]/gu, ' ').replace(/\s+/g, ' ').trim(); }
+  function stripArticle(s) { return norm(s).replace(/^(the|a|an) /, ''); }
+
+  function publicBook(b) {
+    return {
+      id: b.id,
+      title: b.title,
+      subtitle: b.subtitle || '',
+      authors: b.authors || [],
+      author: (b.authors || []).join(', '),
+      year: b.year || null,
+      firstPublished: b.firstPublished || null,
+      publishDate: b.publishDate || '',
+      publisher: b.publisher || '',
+      pages: b.pages || null,
+      format: b.format || '',
+      subjects: (b.subjects || []).slice(0, 8),
+      description: b.description ? b.description.slice(0, 600) : '',
+      isbn13: b.isbn13 || null,
+      status: b.pending ? 'pending' : b.status,
+      statusLabel: b.pending ? 'waiting for a signal' : ({ want: 'to read', reading: 'reading', read: 'finished' }[b.status] || b.status),
+      addedAt: b.addedAt,
+      addedAgo: since(b.addedAt),
+      catalogueUrl: b.olUrl || null
+    };
+  }
+
+  function shelfSummary() {
+    var real = shelf.filter(function (b) { return !b.pending; });
+    var read = real.filter(function (b) { return b.status === 'read'; });
+    var reading = real.filter(function (b) { return b.status === 'reading'; });
+    var want = real.filter(function (b) { return b.status === 'want'; });
+    var authors = {}, subjects = {};
+    real.forEach(function (b) {
+      (b.authors || []).slice(0, 1).forEach(function (a) { authors[a] = (authors[a] || 0) + 1; });
+      (b.subjects || []).slice(0, 4).forEach(function (s) { subjects[s] = (subjects[s] || 0) + 1; });
+    });
+    var top = function (m) { return Object.keys(m).sort(function (a, b) { return m[b] - m[a] || a.localeCompare(b); }).slice(0, 3); };
+    var sum = function (list) { return list.reduce(function (a, b) { return a + (b.pages || 0); }, 0); };
+    var newest = real.slice().sort(function (a, b) { return b.addedAt - a.addedAt; })[0];
+    return {
+      total: real.length,
+      finished: read.length,
+      reading: reading.length,
+      toRead: want.length,
+      pending: shelf.length - real.length,
+      pagesRead: sum(read),
+      pagesToRead: sum(want) + sum(reading),
+      pagesTotal: sum(real),
+      authors: Object.keys(authors).length,
+      topAuthors: top(authors),
+      topSubjects: top(subjects),
+      newest: newest ? publicBook(newest) : null,
+      readingNow: reading.map(publicBook),
+    };
+  }
+
+  /** Fuzzy title/author match. Returns [{book, score}] best first. */
+  function findBooks(query, limit) {
+    var q = stripArticle(query);
+    if (!q) return [];
+    var qw = q.split(' ').filter(function (w) { return w.length > 1; });
+    return shelf.map(function (b) {
+      var t = stripArticle(b.title), a = norm((b.authors || []).join(' '));
+      var score = 0;
+      if (t === q) score = 100;
+      else if (t.indexOf(q) === 0) score = 80;
+      else if (t.indexOf(q) > -1 || q.indexOf(t) > -1) score = 70;
+      else if (a.indexOf(q) > -1) score = 60;
+      else {
+        var tw = t.split(' '), aw = a.split(' ');
+        var hit = qw.filter(function (w) { return tw.indexOf(w) > -1 || aw.indexOf(w) > -1; }).length;
+        score = qw.length ? Math.round(hit / qw.length * 55) : 0;
+        if (hit && hit === tw.length) score += 10;
+      }
+      return { book: publicBook(b), score: score };
+    }).filter(function (r) { return r.score >= 30; })
+      .sort(function (x, y) { return y.score - x.score; })
+      .slice(0, limit || 5);
+  }
+
+  function listBooks(status, limit) {
+    var st = { finished: 'read', read: 'read', done: 'read', reading: 'reading', 'to read': 'want', want: 'want', unread: 'want', pending: 'pending', all: null }[norm(status)] ;
+    if (st === undefined) st = null;
+    var list = shelf.filter(function (b) {
+      if (st === null) return true;
+      if (st === 'pending') return b.pending;
+      return !b.pending && b.status === st;
+    }).sort(function (a, b) { return b.addedAt - a.addedAt; });
+    return { count: list.length, books: list.slice(0, limit || 12).map(publicBook) };
+  }
+
+  window.Shelf = { summary: shelfSummary, find: findBooks, list: listBooks, count: function () { return shelf.length; } };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();

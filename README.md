@@ -220,6 +220,27 @@ external pages to print to PDF as companion documents for the agent.
 5. Bump `VERSION` in `sw.js`, commit, push. The widget script loads from
    `unpkg.com`, which the service worker already caches.
 
+### Otto knows the user's shelf
+
+Otto answers questions about the user's own books: how many they have, how
+many are finished, reading or still to read, what they are reading now, the
+newest book, the most shelved author, and details of one book (author,
+first publication year and edition year, pages, publisher, subjects, blurb,
+ISBN, reading status). Examples: "how many books do I have", "what am I
+reading", "who wrote 1984", "when was Dune published", "do I have Dracula".
+
+- **Local chat** parses these directly (`shelfAnswer` in `otto.js`) and reads
+  `window.Shelf`, a read-only API exposed by `app.js`.
+- **ElevenLabs** gets the same data through three **client tools** that run
+  in the browser, so the shelf never leaves the phone:
+  `get_shelf_summary`, `find_book(query)`, `list_books(status, limit)`.
+  Register them on the agent (Agent → Tools → Add tool → Client) using the
+  exact names and parameters in `docs/elevenlabs-client-tools.json`, and add
+  the `prompt_addition` from that file to the system prompt. The widget also
+  passes `book_count`, `finished_count`, `reading_count`, `to_read_count`
+  and `pages_read` as dynamic variables, usable in the prompt as
+  `{{book_count}}`.
+
 In widget mode the ElevenLabs bubble replaces the local Otto button and is
 hidden on the scanner view so it never covers the camera. Client mode is
 implemented against the documented `Conversation.startSession` API but has

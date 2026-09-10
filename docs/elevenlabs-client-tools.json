@@ -1,0 +1,50 @@
+{
+  "_readme": "Client tools for the Otto agent. Register each one on the agent in ElevenLabs (Agent → Tools → Add tool → Client). The browser runs them (assets/js/otto.js → clientTools) so the user's shelf never leaves the device. Names and parameter names must match exactly.",
+  "tools": [
+    {
+      "type": "client",
+      "name": "get_shelf_summary",
+      "description": "Returns counts and statistics for the user's own bookshelf inside the Spine app: total books, finished, reading, to read, pending offline scans, pages read, pages left, number of authors, most shelved authors and subjects, the newest book, and the books currently being read. Call this for any question like 'how many books do I have', 'how many have I read', 'what is left to read', 'what am I reading now'.",
+      "expects_response": true,
+      "response_timeout_secs": 10,
+      "parameters": []
+    },
+    {
+      "type": "client",
+      "name": "find_book",
+      "description": "Looks up one book on the user's own shelf by title or author (fuzzy match). Returns the best match with its author, publication year, publisher, page count, subjects, a short description, ISBN and the user's reading status, plus other close matches. Call this for questions about a specific book the user owns, such as 'who wrote 1984', 'when was Dune published', 'how many pages is Mrs Dalloway', 'do I have Things Fall Apart', 'what is Crime and Punishment about'. If found is false, tell the user that book is not on their shelf.",
+      "expects_response": true,
+      "response_timeout_secs": 10,
+      "parameters": [
+        {
+          "id": "query",
+          "type": "string",
+          "description": "The book title or author name as the user said it, without words like 'the book' or 'who wrote'.",
+          "required": true
+        }
+      ]
+    },
+    {
+      "type": "client",
+      "name": "list_books",
+      "description": "Lists books on the user's own shelf, newest first, optionally filtered by reading status. Returns a count and up to 'limit' books with title, author, year and status. Call this for 'what books do I have', 'what am I reading', 'what have I finished', 'what is on my to-read list'.",
+      "expects_response": true,
+      "response_timeout_secs": 10,
+      "parameters": [
+        {
+          "id": "status",
+          "type": "string",
+          "description": "One of: all, reading, finished, to read, pending. Defaults to all.",
+          "required": false
+        },
+        {
+          "id": "limit",
+          "type": "number",
+          "description": "Maximum number of books to return. Defaults to 12.",
+          "required": false
+        }
+      ]
+    }
+  ],
+  "prompt_addition": "You can see the user's own bookshelf through three tools. For any question about how many books they have, have read, are reading or have left, call get_shelf_summary. For a question about one specific book they own (author, year, pages, publisher, what it is about, whether they have it), call find_book with the title. To list books by status, call list_books. Answer from the tool result in one or two spoken sentences. If find_book returns found: false, say the book is not on their shelf and that you only know books they have scanned. Never invent details that are not in the tool result."
+}
