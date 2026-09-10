@@ -24,7 +24,7 @@
   'use strict';
 
   var ELEVENLABS = {
-    agentId: '',                // paste the agent-id from the ElevenLabs embed snippet
+    agentId: 'agent_4901m25102xae2nvb0fsy8bkmy9k',
     mode: 'widget',             // 'widget' | 'client'
     widgetSrc: 'https://unpkg.com/@elevenlabs/convai-widget-embed',
     clientSrc: 'https://cdn.jsdelivr.net/npm/@elevenlabs/client/+esm'
