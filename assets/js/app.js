@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.5.0';
+  var VERSION = '1.5.1';
 
   // Where the app lives and where the Android package is published.
   // The APK URL follows the GitHub Releases convention: upload the file

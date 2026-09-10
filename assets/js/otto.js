@@ -60,6 +60,9 @@
       note: 'Questions I cannot answer here go to the ElevenLabs agent.',
       fallback: 'I am not sure about that one. Try a few plain words, or pick a topic below.',
       offlineAgent: 'I can answer that when there is a connection. Meanwhile, ask me about your shelf or the app.',
+      quota: 'My voice service has used up its monthly credits, so I am answering from this phone for now. Your shelf and the help pages still work.',
+      agentErr: 'The voice service is not answering. I will use what I know on this phone.',
+      callEnded: 'Call ended.',
       startersShelf: ['How many books do I have?', 'What should I read next?', 'What am I reading now?', 'Does Spine work offline?'],
       startersEmpty: ['How do I scan a book?', 'Does Spine work offline?', 'The camera does not open.', 'How do I install on iPhone?'],
       st: { want: 'to read', reading: 'reading', read: 'finished', pending: 'waiting for a signal' }
@@ -73,6 +76,9 @@
       note: 'الأسئلة التي لا أستطيع الإجابة عنها هنا تذهب إلى وكيل ElevenLabs.',
       fallback: 'لست متأكدًا من ذلك. جرّب كلمات أبسط، أو اختر موضوعًا من الأسفل.',
       offlineAgent: 'أستطيع الإجابة عن ذلك عند توفر الاتصال. في الوقت الحالي اسألني عن رفّك أو عن التطبيق.',
+      quota: 'استنفدت خدمة الصوت رصيدها الشهري، لذلك أجيب من هذا الهاتف الآن. رفّك وصفحات المساعدة تعمل كالمعتاد.',
+      agentErr: 'خدمة الصوت لا تستجيب. سأستخدم ما أعرفه على هذا الهاتف.',
+      callEnded: 'انتهت المكالمة.',
       startersShelf: ['كم كتابًا لديّ؟', 'ماذا أقرأ بعد ذلك؟', 'ماذا أقرأ الآن؟', 'هل يعمل التطبيق بدون إنترنت؟'],
       startersEmpty: ['كيف أمسح كتابًا؟', 'هل يعمل التطبيق بدون إنترنت؟', 'الكاميرا لا تعمل', 'كيف أثبّت التطبيق على آيفون؟'],
       st: { want: 'للقراءة', reading: 'قيد القراءة', read: 'منتهٍ', pending: 'بانتظار الاتصال' }
@@ -460,7 +466,25 @@
   /* =======================================================
      ElevenLabs client
      ======================================================= */
-  function agentReady() { return ELEVENLABS.mode === 'client' && !!ELEVENLABS.agentId && navigator.onLine; }
+  var agentDownUntil = 0, agentDownWhy = '', explained = false;
+  function agentReady() { return ELEVENLABS.mode === 'client' && !!ELEVENLABS.agentId && navigator.onLine && Date.now() > agentDownUntil; }
+  /** Read the service's own error and decide how long to stop trying. */
+  function noteAgentError(raw) {
+    var msg = String((raw && (raw.message || raw.reason)) || raw || '');
+    if (/quota|credit|out of/i.test(msg)) { agentDownUntil = Date.now() + 6 * 3600 * 1000; agentDownWhy = 'quota'; }
+    else if (msg) { agentDownUntil = Date.now() + 90 * 1000; agentDownWhy = 'error'; }
+    if (msg) try { console.warn('[Otto] agent:', msg); } catch (e) {}
+    return agentDownWhy;
+  }
+  function explainAgent(l) {
+    var t = ui(agentDownWhy === 'quota' ? 'quota' : 'agentErr', l);
+    if (avatar) avatar.hop();
+    typing(false);
+    status('');
+    bubble(t, 'otto');
+    chips(starters(l));
+    say(t);
+  }
 
   function clientTools() {
     var S = global.Shelf;
@@ -502,14 +526,21 @@
         clientTools: clientTools(),
         dynamicVariables: s ? { book_count: s.total, finished_count: s.finished, reading_count: s.reading, to_read_count: s.toRead, pages_read: s.pagesRead } : {},
         onConnect: function () { status(voice ? ui('listening', l) : ''); },
-        onDisconnect: function () {
+        onDisconnect: function (d) {
+          var wasVoice = convVoice;
           conv = null; convVoice = false;
           if (avatar) avatar.talking(false);
           $('#otto-mic').setAttribute('aria-pressed', 'false');
           $('#otto-panel').classList.remove('is-voice');
-          status('');
+          typing(false);
+          if (d && d.reason === 'error') {
+            noteAgentError(d);
+            if (pendingReply) { clearTimeout(pendingReply.timer); pendingReply = null; }
+            explainAgent(l);
+            status('');
+          } else status(wasVoice ? ui('callEnded', l) : '');
         },
-        onError: function () { status('Connection problem.'); },
+        onError: function (e) { noteAgentError(e); },
         onModeChange: function (m) {
           var mode = m && m.mode;
           if (avatar) avatar.talking(mode === 'speaking');
@@ -582,11 +613,19 @@
             ottoSays(faq || fallback(l));
           }, ELEVENLABS.replyTimeout) };
         });
-      }).catch(function () { ottoSays(faq || fallback(l)); });
+      }).catch(function (e) {
+        var why = noteAgentError(e);
+        if (why && !explained) { explained = true; typing(false); explainAgent(l); }
+        else ottoSays(faq || fallback(l));
+      });
       return;
     }
     typing(true);
-    setTimeout(function () { ottoSays(faq || (l === 'ar' && ELEVENLABS.agentId ? { text: ui('offlineAgent', 'ar'), chips: starters('ar') } : fallback(l))); }, 260);
+    setTimeout(function () {
+      if (faq) return ottoSays(faq);
+      if (agentDownWhy && Date.now() < agentDownUntil) return ottoSays({ text: ui(agentDownWhy === 'quota' ? 'quota' : 'agentErr', l), chips: starters(l) });
+      ottoSays(l === 'ar' && ELEVENLABS.agentId ? { text: ui('offlineAgent', 'ar'), chips: starters('ar') } : fallback(l));
+    }, 260);
   }
   function fallback(l) {
     return { text: ui('fallback', l), chips: starters(l) };
@@ -695,7 +734,10 @@
         startConversation(true).catch(function (e) {
           $('#otto-panel').classList.remove('is-voice');
           $('#otto-mic').setAttribute('aria-pressed', 'false');
-          status(/NotAllowed|Permission/i.test(String(e && (e.name || e.message))) ? ui('micOff') : ui('noCall'));
+          if (/NotAllowed|Permission/i.test(String(e && (e.name || e.message)))) { status(ui('micOff')); return; }
+          noteAgentError(e);
+          explainAgent(prefs.lang);
+          if (canListen()) startListening();
         });
         return;
       }
