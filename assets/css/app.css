@@ -566,6 +566,58 @@ svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .danger{color:var(--rust);font-size:var(--t-sm);min-height:50px}
 
 /* =========================================================
+   Help: FAQ accordion, Otto fab, chat sheet
+   ========================================================= */
+.faq__sec{margin-bottom:var(--s5);animation:fadeUp .35s var(--ease-out) both}
+.faq__sec h3{font-size:var(--t-lg);margin-bottom:var(--s3)}
+.faq__item{border-radius:var(--r-md);background:var(--shelf);margin-bottom:var(--s2);overflow:hidden;box-shadow:inset 0 0 0 1px rgba(241,235,220,.07)}
+.faq__q{display:flex;align-items:center;justify-content:space-between;gap:var(--s3);width:100%;min-height:52px;padding:var(--s3) var(--s4);text-align:left;font-weight:600;font-size:var(--t-md)}
+.faq__q svg{width:18px;height:18px;flex:0 0 auto;color:var(--muted);transition:transform .3s var(--ease)}
+.faq__item.is-open .faq__q svg{transform:rotate(180deg);color:var(--brass)}
+.faq__a{display:grid;grid-template-rows:0fr;transition:grid-template-rows .3s var(--ease-out)}
+.faq__a>div{overflow:hidden}
+.faq__a p{padding:0 var(--s4) var(--s4);color:var(--paper-dim);font-size:var(--t-sm);line-height:1.65}
+.faq__item.is-open .faq__a{grid-template-rows:1fr}
+.faq__none{color:var(--muted);text-align:center;padding:var(--s6) 0}
+
+.otto-fab{
+  position:fixed;right:var(--s4);bottom:calc(var(--tabh) + var(--sab) + var(--s4));z-index:45;
+  width:58px;height:58px;border-radius:50%;display:grid;place-items:center;
+  background:linear-gradient(160deg,var(--slate-hi),var(--shelf));
+  box-shadow:0 12px 30px -10px rgba(0,0,0,.9), inset 0 0 0 1px rgba(241,235,220,.14), 0 0 0 0 rgba(217,164,65,.4);
+  animation:fabIn .6s .3s var(--ease-spring) both, fabPulse 3.6s 2s ease-out infinite;
+  transition:transform .2s var(--ease);
+}
+.otto-fab:active{transform:scale(.92)}
+.otto-fab canvas{width:44px;height:44px;image-rendering:pixelated;transform:translateY(2px)}
+.otto-fab__ring{position:absolute;inset:-3px;border-radius:50%;border:2px solid rgba(217,164,65,.5);opacity:0;animation:ringOut 3.6s 2s ease-out infinite}
+@keyframes fabIn{from{opacity:0;transform:translateY(20px) scale(.6)}}
+@keyframes fabPulse{0%,70%,100%{box-shadow:0 12px 30px -10px rgba(0,0,0,.9), inset 0 0 0 1px rgba(241,235,220,.14)}80%{box-shadow:0 12px 30px -10px rgba(0,0,0,.9), inset 0 0 0 1px rgba(217,164,65,.6)}}
+.view--scan.is-active ~ .otto-fab, #view-settings.is-active ~ .otto-fab, #view-faq.is-active ~ .otto-fab{display:none}
+
+.sheet__panel--chat{display:grid;grid-template-rows:auto auto 1fr auto auto;height:min(88vh,88dvh);max-height:none;padding-bottom:calc(var(--sab) + var(--s4))}
+.chat__head{display:flex;align-items:center;gap:var(--s3);padding-bottom:var(--s3);border-bottom:1px solid rgba(241,235,220,.08)}
+.chat__avatar{width:56px;height:56px;border-radius:50%;background:radial-gradient(circle,rgba(217,164,65,.3),transparent 70%),var(--slate);display:grid;place-items:center;flex:0 0 auto}
+.chat__avatar canvas{width:48px;height:48px;image-rendering:pixelated;transform:translateY(2px)}
+.chat__who{flex:1;min-width:0}
+.chat__who b{display:block;font-family:var(--serif);font-size:var(--t-lg)}
+.chat__who small{display:block;color:var(--brass);font-size:var(--t-xs);min-height:1.2em}
+.chat__log{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:var(--s4) 0;display:grid;gap:var(--s3);align-content:start}
+.msg{display:flex}
+.msg--me{justify-content:flex-end}
+.msg__b{max-width:84%;padding:var(--s3) var(--s4);border-radius:18px;font-size:var(--t-md);line-height:1.5;animation:demoIn .3s var(--ease-spring) both}
+.msg--otto .msg__b{background:var(--slate);border-bottom-left-radius:6px;font-family:var(--serif)}
+.msg--me .msg__b{background:var(--brass);color:#241703;border-bottom-right-radius:6px}
+.chat__chips{display:flex;gap:var(--s2);overflow-x:auto;scrollbar-width:none;padding:0 0 var(--s3);min-height:44px}
+.chat__chips::-webkit-scrollbar{display:none}
+.chip--q{white-space:nowrap}
+.chat__form{display:grid;grid-template-columns:1fr auto auto;gap:var(--s2);align-items:center}
+.chat__form .field{min-height:46px}
+.chat__mic[aria-pressed="true"]{background:var(--rust);color:#fff;animation:micPulse 1.2s ease-in-out infinite}
+@keyframes micPulse{50%{box-shadow:0 0 0 8px rgba(224,85,78,.25)}}
+.chat__send{background:var(--brass);color:#241703}
+
+/* =========================================================
    6. Stats
    ========================================================= */
 .statgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:var(--s3);margin-bottom:var(--s5)}

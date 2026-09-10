@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.1.2';
+  var VERSION = '1.2.0';
 
   // Where the app lives and where the Android package is published.
   // The APK URL follows the GitHub Releases convention: upload the file
@@ -151,6 +151,8 @@
     if (page === 'stats') renderStats();
     if (page === 'scan') enterScan();
     if (page === 'settings') syncSettings();
+    if (page === 'faq') renderFaq();
+    if (window.Otto) window.Otto.setWidgetVisible(page !== 'scan');
     window.scrollTo(0, 0);
     void fromFront;
   }
@@ -566,7 +568,7 @@
     if (current === 'scan' && !scanning) setMode(mode, true);
   }
   function overlayOpen() {
-    return !$('#sheet').hidden || !$('#manual').hidden || !$('#confirm').hidden || !$('#getapp').hidden || !$('#lookup').hidden;
+    return !$('#sheet').hidden || !$('#manual').hidden || !$('#confirm').hidden || !$('#getapp').hidden || !$('#chat').hidden || !$('#lookup').hidden;
   }
 
   function setMode(m, force) {
@@ -746,6 +748,7 @@
     el.hidden = true;
     if (id === 'sheet') { $('#sheet-body').onclick = null; resumeScan(); }
     if (id === 'confirm') confirmCb = null;
+    if (id === 'chat' && window.Otto) window.Otto.onClose();
     if (lastFocus && lastFocus.focus && document.contains(lastFocus)) { try { lastFocus.focus({ preventScroll: true }); } catch (e) {} }
     lastFocus = null;
   }
@@ -984,6 +987,28 @@
       segs.map(function (s) {
         return '<div><i style="background:' + s[2] + '"></i><span><b>' + s[1] + '</b> <small>' + s[0] + '</small></span></div>';
       }).join('') + '</div></div>';
+  }
+
+  /* =======================================================
+     Help & FAQ
+     ======================================================= */
+  var faqQuery = '';
+  function renderFaq() {
+    var host = $('#faq-body');
+    var q = faqQuery.toLowerCase();
+    var html = (window.FAQ || []).map(function (sec, si) {
+      var items = sec.items.filter(function (it) {
+        return !q || (it.q + ' ' + it.a + ' ' + (it.k || []).join(' ')).toLowerCase().indexOf(q) > -1;
+      });
+      if (!items.length) return '';
+      return '<section class="faq__sec" style="animation-delay:' + (si * 40) + 'ms"><h3>' + esc(sec.section) + '</h3>' +
+        items.map(function (it) {
+          return '<div class="faq__item' + (q ? ' is-open' : '') + '"><button class="faq__q" aria-expanded="' + (q ? 'true' : 'false') + '">' + esc(it.q) +
+            '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>' +
+            '<div class="faq__a"><div><p>' + esc(it.a) + '</p></div></div></div>';
+        }).join('') + '</section>';
+    }).join('');
+    host.innerHTML = html || '<p class="faq__none">Nothing matches that. Try fewer words, or ask Otto.</p>';
   }
 
   /* =======================================================
@@ -1283,6 +1308,15 @@
       });
     };
     $('#set-offline').onclick = prepareOffline;
+    $('#set-faq').onclick = function () { go('faq'); };
+    $('#set-ask').onclick = function () { if (window.Otto) window.Otto.open(); };
+    $('#faq-ask').onclick = function () { if (window.Otto) window.Otto.open(); };
+    $('#faq-search').oninput = function () { faqQuery = this.value.trim(); renderFaq(); };
+    $('#faq-body').onclick = function (e) {
+      var b = e.target.closest('.faq__q'); if (!b) return;
+      var item = b.parentNode, open = item.classList.toggle('is-open');
+      b.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
 
     // Get the app
     function openGetApp() { renderGetApp(); openSheet('getapp'); }
@@ -1341,6 +1375,7 @@
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
       if (!$('#confirm').hidden) closeSheet('confirm');
+      else if (!$('#chat').hidden) closeSheet('chat');
       else if (!$('#getapp').hidden) closeSheet('getapp');
       else if (!$('#sheet').hidden) closeSheet('sheet');
       else if (!$('#manual').hidden) closeSheet('manual');

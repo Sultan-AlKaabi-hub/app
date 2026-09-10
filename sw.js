@@ -17,7 +17,7 @@
    functionality.
    ========================================================= */
 
-var VERSION = 'spine-v1.1.2';
+var VERSION = 'spine-v1.2.0';
 var SHELL = VERSION + '-shell';
 var COVERS = VERSION + '-covers';
 var DATA = VERSION + '-data';
@@ -33,6 +33,8 @@ var SHELL_FILES = [
   './assets/js/pixel.js',
   './assets/js/scanner.js',
   './assets/js/qr.js',
+  './assets/js/faq.js',
+  './assets/js/otto.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/maskable-192.png',

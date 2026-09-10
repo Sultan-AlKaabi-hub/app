@@ -209,6 +209,10 @@
         <input type="checkbox" id="set-haptics" class="switch"></label>
       <label class="row"><span><b>Reduce motion</b><small>Turns off the sweep and card animations</small></span>
         <input type="checkbox" id="set-motion" class="switch"></label>
+      <button class="row row--btn" id="set-faq"><span><b>Help &amp; FAQ</b><small>Scanning, camera, offline, your shelf</small></span>
+        <svg class="row__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+      <button class="row row--btn" id="set-ask"><span><b>Ask Otto</b><small>Type or talk. He answers in text and voice</small></span>
+        <svg class="row__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
       <button class="row row--btn" id="set-tour"><span><b>Replay the walkthrough</b><small>Otto explains it again</small></span>
         <svg class="row__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
       <button class="row row--btn" id="set-export"><span><b>Export your shelf</b><small>A JSON file you can keep or re-import</small></span>
@@ -222,6 +226,23 @@
     <p class="fineprint">Book data comes from Open&nbsp;Library, a free public catalogue run by the Internet Archive. Spine stores your shelf in this browser only — nothing is uploaded.</p>
     <p class="fineprint" id="ver"></p>
   </section>
+
+  <!-- FAQ -->
+  <section class="view view--page" id="view-faq" aria-label="Help and FAQ">
+    <header class="topbar"><div><h2 class="topbar__title">Help</h2><p class="topbar__sub">Answers to the usual questions</p></div>
+      <button class="iconbtn" data-go="settings" aria-label="Back to settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+      </button></header>
+    <div class="searchwrap"><input type="search" id="faq-search" class="field" placeholder="Search the help" autocomplete="off" aria-label="Search the help"></div>
+    <div id="faq-body"></div>
+    <button class="btn btn--primary btn--wide" id="faq-ask" style="margin-top:1rem">Ask Otto instead</button>
+  </section>
+
+  <!-- ASK OTTO FAB -->
+  <button class="otto-fab" id="otto-fab" aria-label="Ask Otto for help">
+    <canvas id="otto-fab-cv" width="28" height="28" aria-hidden="true"></canvas>
+    <span class="otto-fab__ring" aria-hidden="true"></span>
+  </button>
 
   <!-- TAB BAR -->
   <nav class="tabs" aria-label="Main">
@@ -278,6 +299,36 @@
   </article>
 </div>
 
+<!-- ============ ASK OTTO ============ -->
+<div class="sheet" id="chat" hidden role="dialog" aria-modal="true" aria-label="Ask Otto">
+  <div class="sheet__scrim" data-close="chat"></div>
+  <article class="sheet__panel sheet__panel--chat" tabindex="-1">
+    <button class="sheet__grip" data-close="chat" aria-label="Close"></button>
+    <header class="chat__head">
+      <div class="chat__avatar"><canvas id="otto-chat-cv" width="28" height="28" aria-hidden="true"></canvas></div>
+      <div class="chat__who">
+        <b>Otto</b>
+        <small id="chat-status" role="status" aria-live="polite"></small>
+      </div>
+      <button class="iconbtn" id="chat-voice" aria-label="Read answers aloud" aria-pressed="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9zM16 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11"/></svg>
+      </button>
+    </header>
+    <div class="chat__log" id="chat-log" aria-live="polite"></div>
+    <div class="chat__chips" id="chat-chips"></div>
+    <form class="chat__form" id="chat-form" autocomplete="off">
+      <input class="field" id="chat-input" placeholder="Ask about scanning, offline, the camera…" aria-label="Your question" enterkeyhint="send">
+      <button type="button" class="iconbtn iconbtn--solid chat__mic" id="chat-mic" aria-label="Hold to talk" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg>
+      </button>
+      <button type="submit" class="iconbtn iconbtn--solid chat__send" id="chat-send" aria-label="Send">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h14M13 6l6 6-6 6"/></svg>
+      </button>
+    </form>
+    <div id="chat-embed"></div>
+  </article>
+</div>
+
 <!-- ============ CONFIRM ============ -->
 <div class="sheet" id="confirm" hidden role="alertdialog" aria-modal="true" aria-labelledby="confirm-h">
   <div class="sheet__scrim" data-close="confirm"></div>
@@ -310,6 +361,8 @@
 <script src="./assets/js/pixel.js"></script>
 <script src="./assets/js/api.js"></script>
 <script src="./assets/js/scanner.js"></script>
+<script src="./assets/js/faq.js"></script>
 <script src="./assets/js/app.js"></script>
+<script src="./assets/js/otto.js"></script>
 </body>
 </html>

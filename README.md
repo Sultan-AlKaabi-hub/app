@@ -177,6 +177,55 @@ while there is no connection, and "Back online" briefly when it returns.
 
 ---
 
+## Help, FAQ and Ask Otto
+
+`assets/js/faq.js` is the single source for three things: the Help page
+(Settings → Help & FAQ), Otto's built-in answers in the chat sheet, and the
+knowledge base PDF. Edit the questions there and rebuild the PDF:
+
+```bash
+python docs/build-knowledge-base.py
+```
+
+The PDF lands at `docs/spine-knowledge-base.pdf`. Its last section lists the
+external pages to print to PDF as companion documents for the agent.
+
+### Otto's three back ends (`assets/js/otto.js`)
+
+| Mode | When | Text | Voice |
+| --- | --- | --- | --- |
+| Local (default) | No agent configured | Answers from the FAQ, offline | Browser speech recognition and synthesis |
+| ElevenLabs widget | `agentId` set, `mode: 'widget'` | The official `<elevenlabs-convai>` element, with Otto as its avatar | Handled by ElevenLabs |
+| ElevenLabs client | `agentId` set, `mode: 'client'` | Spine's own chat sheet, driven through `@elevenlabs/client` | Agent audio; Otto's beak moves while it speaks |
+
+### Connecting the ElevenLabs agent
+
+1. In ElevenLabs, create a Conversational AI agent. Upload
+   `docs/spine-knowledge-base.pdf` to its knowledge base, plus any companion
+   PDFs. Paste the suggested system prompt from the last page of the PDF.
+2. Make the agent **public** (no authentication) so the browser can connect
+   without a server, or host your own signed-URL endpoint.
+3. Copy the `agent-id` from the embed snippet the dashboard shows. It looks
+   like `<elevenlabs-convai agent-id="abc123..."></elevenlabs-convai>`.
+4. Open `assets/js/otto.js` and set:
+
+   ```js
+   var ELEVENLABS = {
+     agentId: 'abc123...',   // from the snippet
+     mode: 'widget',         // or 'client' to keep Spine's own chat sheet
+     ...
+   };
+   ```
+
+5. Bump `VERSION` in `sw.js`, commit, push. The widget script loads from
+   `unpkg.com`, which the service worker already caches.
+
+In widget mode the ElevenLabs bubble replaces the local Otto button and is
+hidden on the scanner view so it never covers the camera. Client mode is
+implemented against the documented `Conversation.startSession` API but has
+not been exercised against a live agent yet; test it once the agent exists
+and fall back to widget mode if anything misbehaves.
+
 ## Data and privacy
 
 The shelf is held in `localStorage` on the device. Nothing is uploaded, there is
