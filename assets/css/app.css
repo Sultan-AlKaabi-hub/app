@@ -580,47 +580,105 @@ svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.8;stroke
 .faq__item.is-open .faq__a{grid-template-rows:1fr}
 .faq__none{color:var(--muted);text-align:center;padding:var(--s6) 0}
 
+/* --- Ask Otto: a pixel owl in a brass ring that unfolds into a panel --- */
 .otto-fab{
   position:fixed;right:var(--s4);bottom:calc(var(--tabh) + var(--sab) + var(--s4));z-index:45;
-  width:58px;height:58px;border-radius:50%;display:grid;place-items:center;
-  background:linear-gradient(160deg,var(--slate-hi),var(--shelf));
-  box-shadow:0 12px 30px -10px rgba(0,0,0,.9), inset 0 0 0 1px rgba(241,235,220,.14), 0 0 0 0 rgba(217,164,65,.4);
-  animation:fabIn .6s .3s var(--ease-spring) both, fabPulse 3.6s 2s ease-out infinite;
-  transition:transform .2s var(--ease);
+  width:56px;height:56px;border-radius:50%;display:grid;place-items:center;
+  background:radial-gradient(circle at 50% 40%,var(--slate-hi),var(--shelf) 70%);
+  box-shadow:0 12px 30px -10px rgba(0,0,0,.9), inset 0 0 0 1.5px rgba(217,164,65,.55);
+  transition:transform .35s var(--ease-spring), opacity .2s;
+  animation:fabIn .6s .4s var(--ease-spring) both;
 }
-.otto-fab:active{transform:scale(.92)}
 .otto-fab canvas{width:44px;height:44px;image-rendering:pixelated;transform:translateY(2px)}
-.otto-fab__ring{position:absolute;inset:-3px;border-radius:50%;border:2px solid rgba(217,164,65,.5);opacity:0;animation:ringOut 3.6s 2s ease-out infinite}
+.otto-fab__glow{position:absolute;inset:-4px;border-radius:50%;border:1.5px solid rgba(217,164,65,.5);opacity:0;animation:ringOut 4s 2s ease-out infinite}
+.otto-fab__tip{
+  position:absolute;right:calc(100% + 10px);top:50%;transform:translateY(-50%) translateX(6px);
+  background:var(--slate);color:var(--parchment);font-size:var(--t-xs);padding:5px 10px;border-radius:999px;
+  white-space:nowrap;opacity:0;pointer-events:none;box-shadow:inset 0 0 0 1px rgba(241,235,220,.12);
+  animation:tipPeek 6s 1.6s ease-in-out 1 both;
+}
+@keyframes tipPeek{0%,8%{opacity:0;transform:translateY(-50%) translateX(6px)}14%,70%{opacity:1;transform:translateY(-50%)}78%,100%{opacity:0;transform:translateY(-50%) translateX(6px)}}
+.otto-fab:active{transform:scale(.9)}
+.otto-fab.is-hidden{transform:scale(.4);opacity:0;pointer-events:none}
 @keyframes fabIn{from{opacity:0;transform:translateY(20px) scale(.6)}}
-@keyframes fabPulse{0%,70%,100%{box-shadow:0 12px 30px -10px rgba(0,0,0,.9), inset 0 0 0 1px rgba(241,235,220,.14)}80%{box-shadow:0 12px 30px -10px rgba(0,0,0,.9), inset 0 0 0 1px rgba(217,164,65,.6)}}
-.view--scan.is-active ~ .otto-fab, #view-settings.is-active ~ .otto-fab, #view-faq.is-active ~ .otto-fab{display:none}
+.view--scan.is-active ~ .otto-fab, #view-faq.is-active ~ .otto-fab{display:none}
+.view--scan.is-active ~ .otto{display:none}
 
-/* ElevenLabs widget host: its bubble is absolutely positioned inside the
-   host, so raising the host's bottom edge keeps it clear of the tab bar. */
-elevenlabs-convai{position:fixed!important;left:0!important;right:0!important;top:0!important;
-  bottom:calc(var(--tabh) + var(--sab) - 14px)!important;z-index:46!important}
+.otto{
+  position:fixed;right:var(--s3);bottom:calc(var(--tabh) + var(--sab) + var(--s3));z-index:47;
+  width:min(calc(100vw - var(--s3) * 2),380px);
+  max-height:min(72vh,72dvh,600px);
+  display:grid;grid-template-rows:auto 1fr auto auto;
+  background:linear-gradient(180deg,var(--slate),var(--shelf) 30%);
+  border-radius:var(--r-lg);
+  box-shadow:0 30px 70px -24px rgba(0,0,0,.95), 0 0 0 1px rgba(217,164,65,.28), inset 0 1px 0 rgba(241,235,220,.08);
+  transform-origin:calc(100% - 28px) calc(100% - 28px);
+  transform:scale(.3) translateY(10px);opacity:0;
+  transition:transform .42s var(--ease-spring), opacity .22s ease;
+  overflow:hidden;
+}
+.otto.is-open{transform:none;opacity:1}
+.otto::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(70% 45% at 20% 0%, rgba(217,164,65,.14), transparent 70%)}
+.otto__head{position:relative;display:flex;align-items:center;gap:var(--s3);padding:var(--s3) var(--s3) var(--s3) var(--s4);border-bottom:1px solid rgba(241,235,220,.08)}
+.otto__avatar{position:relative;width:44px;height:44px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;
+  background:radial-gradient(circle,rgba(217,164,65,.28),transparent 68%),var(--ink);box-shadow:inset 0 0 0 1px rgba(217,164,65,.35)}
+.otto__avatar canvas{width:38px;height:38px;image-rendering:pixelated;transform:translateY(2px)}
+.otto__who{flex:1;min-width:0}
+.otto__who b{display:block;font-family:var(--serif);font-size:var(--t-lg);line-height:1.1}
+.otto__who small{display:block;color:var(--brass);font-size:var(--t-xs);min-height:1.2em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.otto__ib{width:38px;height:38px;color:var(--muted)}
+.otto__ib svg{width:20px;height:20px}
+.otto__ib[aria-pressed="true"]{background:rgba(217,164,65,.14);color:var(--brass)}
 
-.sheet__panel--chat{display:grid;grid-template-rows:auto auto 1fr auto auto;height:min(88vh,88dvh);max-height:none;padding-bottom:calc(var(--sab) + var(--s4))}
-.chat__head{display:flex;align-items:center;gap:var(--s3);padding-bottom:var(--s3);border-bottom:1px solid rgba(241,235,220,.08)}
-.chat__avatar{width:56px;height:56px;border-radius:50%;background:radial-gradient(circle,rgba(217,164,65,.3),transparent 70%),var(--slate);display:grid;place-items:center;flex:0 0 auto}
-.chat__avatar canvas{width:48px;height:48px;image-rendering:pixelated;transform:translateY(2px)}
-.chat__who{flex:1;min-width:0}
-.chat__who b{display:block;font-family:var(--serif);font-size:var(--t-lg)}
-.chat__who small{display:block;color:var(--brass);font-size:var(--t-xs);min-height:1.2em}
-.chat__log{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:var(--s4) 0;display:grid;gap:var(--s3);align-content:start}
-.msg{display:flex}
-.msg--me{justify-content:flex-end}
-.msg__b{max-width:84%;padding:var(--s3) var(--s4);border-radius:18px;font-size:var(--t-md);line-height:1.5;animation:demoIn .3s var(--ease-spring) both}
-.msg--otto .msg__b{background:var(--slate);border-bottom-left-radius:6px;font-family:var(--serif)}
-.msg--me .msg__b{background:var(--brass);color:#241703;border-bottom-right-radius:6px}
-.chat__chips{display:flex;gap:var(--s2);overflow-x:auto;scrollbar-width:none;padding:0 0 var(--s3);min-height:44px}
-.chat__chips::-webkit-scrollbar{display:none}
-.chip--q{white-space:nowrap}
-.chat__form{display:grid;grid-template-columns:1fr auto auto;gap:var(--s2);align-items:center}
-.chat__form .field{min-height:46px}
-.chat__mic[aria-pressed="true"]{background:var(--rust);color:#fff;animation:micPulse 1.2s ease-in-out infinite}
+.otto__log{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:var(--s3) var(--s3) 0;display:grid;gap:var(--s2);align-content:start;min-height:120px;scrollbar-width:thin}
+.omsg{display:flex}
+.omsg--me{justify-content:flex-end}
+.omsg__b{max-width:86%;padding:var(--s2) var(--s3);border-radius:16px;font-size:var(--t-sm);line-height:1.5;animation:msgIn .35s var(--ease-spring) both}
+@keyframes msgIn{from{opacity:0;transform:translateY(8px) scale(.94)}}
+.omsg--otto .omsg__b{background:var(--slate-hi);border-bottom-left-radius:5px;font-family:var(--serif);font-size:var(--t-md)}
+.omsg--me .omsg__b{background:var(--brass);color:#241703;border-bottom-right-radius:5px}
+.omsg--typing .omsg__b{display:flex;gap:4px;padding:10px 12px}
+.omsg--typing i{width:6px;height:6px;border-radius:50%;background:var(--brass);animation:dot 1.1s ease-in-out infinite}
+.omsg--typing i:nth-child(2){animation-delay:.15s}.omsg--typing i:nth-child(3){animation-delay:.3s}
+@keyframes dot{0%,60%,100%{transform:translateY(0);opacity:.45}30%{transform:translateY(-4px);opacity:1}}
+
+.omsg .recs{display:flex;gap:var(--s2);overflow-x:auto;scrollbar-width:none;padding:var(--s2) 0 2px;margin-left:0;width:100%}
+.omsg--otto{flex-wrap:wrap}
+.recs::-webkit-scrollbar{display:none}
+.rec{flex:0 0 96px;display:grid;gap:3px;text-decoration:none;color:inherit;animation:msgIn .4s var(--ease-spring) both;animation-delay:calc(.1s + var(--i,0) * 70ms)}
+.rec__cov{display:block;width:96px;aspect-ratio:2/3;border-radius:3px 6px 6px 3px;overflow:hidden;background:linear-gradient(150deg,var(--slate-hi),var(--slate));
+  box-shadow:0 8px 18px -10px #000, inset 3px 0 0 rgba(217,164,65,.55);display:grid;place-items:center;transition:transform .2s var(--ease)}
+.rec:active .rec__cov{transform:translateY(-3px) rotateY(-8deg)}
+.rec__cov img{width:100%;height:100%;object-fit:cover;display:block}
+.rec__cov i{font-family:var(--serif);font-style:normal;font-size:2rem;color:rgba(241,235,220,.6)}
+.rec__t{font-family:var(--serif);font-size:var(--t-xs);line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.rec__a{color:var(--muted);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.otto__chips{display:flex;gap:var(--s2);overflow-x:auto;scrollbar-width:none;padding:var(--s2) var(--s3);min-height:44px}
+.otto__chips::-webkit-scrollbar{display:none}
+.otto__chips .chip{min-height:32px;font-size:var(--t-xs);white-space:nowrap;animation:msgIn .3s var(--ease-spring) both}
+.otto__form{display:grid;grid-template-columns:1fr auto auto;gap:var(--s2);align-items:center;padding:0 var(--s3) var(--s3)}
+.otto__in{min-height:42px;font-size:var(--t-sm);background:var(--ink)}
+.otto__mic,.otto__send{width:42px;height:42px;background:var(--slate-hi);color:var(--parchment)}
+.otto__send{background:var(--brass);color:#241703}
+.otto__mic[aria-pressed="true"]{background:var(--rust);color:#fff;animation:micPulse 1.2s ease-in-out infinite}
 @keyframes micPulse{50%{box-shadow:0 0 0 8px rgba(224,85,78,.25)}}
-.chat__send{background:var(--brass);color:#241703}
+
+/* voice mode: a brass waveform breathes along the bottom edge */
+.otto__wave{display:none;position:absolute;left:0;right:0;bottom:0;height:3px;gap:2px;justify-content:center;align-items:flex-end}
+.otto.is-voice .otto__wave{display:flex}
+.otto.is-voice{box-shadow:0 30px 70px -24px rgba(0,0,0,.95), 0 0 0 1.5px rgba(46,158,143,.6), 0 0 30px -6px rgba(46,158,143,.5)}
+.otto__wave i{width:14%;height:3px;background:var(--verdigris);border-radius:2px;animation:wave 1.1s ease-in-out infinite;transform-origin:bottom}
+.otto__wave i:nth-child(2){animation-delay:.12s}.otto__wave i:nth-child(3){animation-delay:.24s}.otto__wave i:nth-child(4){animation-delay:.36s}.otto__wave i:nth-child(5){animation-delay:.48s}
+@keyframes wave{50%{transform:scaleY(2.6)}}
+
+@media(min-width:640px){
+  .otto{right:var(--s5);bottom:calc(var(--tabh) + var(--sab) + var(--s5));width:400px;max-height:min(70vh,640px)}
+  .otto-fab{right:var(--s5);bottom:calc(var(--tabh) + var(--sab) + var(--s5))}
+}
+body.no-motion .otto{transition:none}
+body.no-motion .otto-fab__tip{animation:none}
 
 /* =========================================================
    6. Stats

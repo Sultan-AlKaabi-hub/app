@@ -44,7 +44,22 @@
           "required": false
         }
       ]
+    },
+    {
+      "type": "client",
+      "name": "recommend_books",
+      "description": "Suggests up to four books the user does not own yet, chosen from Open Library by the subjects of one book they own (pass its title) or, with no title, by the subjects most common across their shelf. Returns title, author, year, cover and a link for each. Call this for 'what should I read next', 'recommend something', 'something like Dune'.",
+      "expects_response": true,
+      "response_timeout_secs": 15,
+      "parameters": [
+        {
+          "id": "title",
+          "type": "string",
+          "description": "Optional: a book on the user's shelf to base the suggestions on.",
+          "required": false
+        }
+      ]
     }
   ],
-  "prompt_addition": "You can see the user's own bookshelf through three tools. For any question about how many books they have, have read, are reading or have left, call get_shelf_summary. For a question about one specific book they own (author, year, pages, publisher, what it is about, whether they have it), call find_book with the title. To list books by status, call list_books. Answer from the tool result in one or two spoken sentences. If find_book returns found: false, say the book is not on their shelf and that you only know books they have scanned. Never invent details that are not in the tool result."
+  "prompt_addition": "You can see the user's own bookshelf through three tools. For any question about how many books they have, have read, are reading or have left, call get_shelf_summary. For a question about one specific book they own (author, year, pages, publisher, what it is about, whether they have it), call find_book with the title. To list books by status, call list_books. Answer from the tool result in one or two spoken sentences. If find_book returns found: false, say the book is not on their shelf and that you only know books they have scanned. Never invent details that are not in the tool result. For reading suggestions call recommend_books, optionally with the title of a book they own, and present at most three of the results with a short reason each."
 }

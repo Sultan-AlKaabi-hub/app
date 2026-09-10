@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '1.3.0';
+  var VERSION = '1.4.0';
 
   // Where the app lives and where the Android package is published.
   // The APK URL follows the GitHub Releases convention: upload the file
@@ -152,7 +152,7 @@
     if (page === 'scan') enterScan();
     if (page === 'settings') syncSettings();
     if (page === 'faq') renderFaq();
-    if (window.Otto) window.Otto.setWidgetVisible(page !== 'scan');
+    if (window.Otto) window.Otto.onRoute(page);
     window.scrollTo(0, 0);
     void fromFront;
   }
@@ -569,7 +569,7 @@
     if (current === 'scan' && !scanning) setMode(mode, true);
   }
   function overlayOpen() {
-    return !$('#sheet').hidden || !$('#manual').hidden || !$('#confirm').hidden || !$('#getapp').hidden || !$('#chat').hidden || !$('#lookup').hidden;
+    return !$('#sheet').hidden || !$('#manual').hidden || !$('#confirm').hidden || !$('#getapp').hidden || !$('#lookup').hidden || !!(window.Otto && window.Otto.isOpen());
   }
 
   function setMode(m, force) {
@@ -749,7 +749,6 @@
     el.hidden = true;
     if (id === 'sheet') { $('#sheet-body').onclick = null; resumeScan(); }
     if (id === 'confirm') confirmCb = null;
-    if (id === 'chat' && window.Otto) window.Otto.onClose();
     if (lastFocus && lastFocus.focus && document.contains(lastFocus)) { try { lastFocus.focus({ preventScroll: true }); } catch (e) {} }
     lastFocus = null;
   }
@@ -1377,7 +1376,7 @@
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
       if (!$('#confirm').hidden) closeSheet('confirm');
-      else if (!$('#chat').hidden) closeSheet('chat');
+      else if (window.Otto && window.Otto.isOpen()) window.Otto.close();
       else if (!$('#getapp').hidden) closeSheet('getapp');
       else if (!$('#sheet').hidden) closeSheet('sheet');
       else if (!$('#manual').hidden) closeSheet('manual');
@@ -1500,7 +1499,66 @@
     return { count: list.length, books: list.slice(0, limit || 12).map(publicBook) };
   }
 
-  window.Shelf = { summary: shelfSummary, find: findBooks, list: listBooks, count: function () { return shelf.length; } };
+  /**
+   * Books that share a subject with one book (seedId) or with the shelf as
+   * a whole, from Open Library's search index, best rated first. Books
+   * already on the shelf are left out. Network only.
+   */
+  var GENERIC = /^(fiction|literature|novel|novels|books|reading|general|english|classic literature|literary|open library staff picks|large type books|accessible book|protected daisy|in library)$/i;
+  function pickSubjects(list) {
+    var seen = {}, out = [];
+    list.forEach(function (s) {
+      var k = String(s || '').replace(/\s*\(.*\)$/, '').trim();
+      if (!k || k.length < 4 || k.length > 40 || GENERIC.test(k) || seen[k.toLowerCase()]) return;
+      seen[k.toLowerCase()] = 1; out.push(k);
+    });
+    return out;
+  }
+  function recommend(seedId) {
+    var real = shelf.filter(function (b) { return !b.pending; });
+    var seed = seedId ? byId(seedId) : null;
+    var subjects;
+    if (seed) subjects = pickSubjects(seed.subjects || []).slice(0, 3);
+    else {
+      var tally = {};
+      real.forEach(function (b) { pickSubjects((b.subjects || []).slice(0, 5)).forEach(function (s) { tally[s] = (tally[s] || 0) + 1; }); });
+      subjects = Object.keys(tally).sort(function (a, b) { return tally[b] - tally[a]; }).slice(0, 3);
+    }
+    if (!subjects.length) return Promise.resolve({ subjects: [], books: [] });
+    var haveIsbn = {}, haveTitle = {};
+    shelf.forEach(function (b) { if (b.isbn13) haveIsbn[b.isbn13] = 1; haveTitle[norm(b.title)] = 1; });
+    var seen = {};
+    return Promise.all(subjects.slice(0, 2).map(function (s) {
+      var url = 'https://openlibrary.org/search.json?q=' + encodeURIComponent('subject:"' + s + '" language:eng') +
+        '&sort=rating&limit=8&fields=key,title,author_name,first_publish_year,cover_i,isbn,ratings_average,ratings_count';
+      return fetch(url).then(function (r) { return r.ok ? r.json() : { docs: [] }; }).then(function (j) {
+        return (j.docs || []).map(function (d) { d._subject = s; return d; });
+      }).catch(function () { return []; });
+    })).then(function (lists) {
+      var merged = [];
+      // Interleave so both subjects get a say, then de-duplicate.
+      var max = Math.max.apply(null, lists.map(function (l) { return l.length; }).concat([0]));
+      for (var i = 0; i < max; i++) lists.forEach(function (l) { if (l[i]) merged.push(l[i]); });
+      var out = [];
+      merged.forEach(function (d) {
+        var t = norm(d.title || '');
+        if (!t || seen[t] || haveTitle[t]) return;
+        if ((d.isbn || []).some(function (x) { return haveIsbn[x]; })) return;
+        if (seed && t === norm(seed.title)) return;
+        if ((d.ratings_count || 0) < 5) return;
+        seen[t] = 1;
+        out.push({
+          title: d.title, author: (d.author_name || [])[0] || '', year: d.first_publish_year || null,
+          cover: d.cover_i ? 'https://covers.openlibrary.org/b/id/' + d.cover_i + '-M.jpg' : null,
+          rating: d.ratings_average ? Math.round(d.ratings_average * 10) / 10 : null,
+          subject: d._subject, olKey: d.key || null, url: 'https://openlibrary.org' + (d.key || '')
+        });
+      });
+      return { subjects: subjects, seed: seed ? seed.title : null, books: out.slice(0, 4) };
+    });
+  }
+
+  window.Shelf = { summary: shelfSummary, find: findBooks, list: listBooks, recommend: recommend, count: function () { return shelf.length; } };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();

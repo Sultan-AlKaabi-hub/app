@@ -190,13 +190,44 @@ python docs/build-knowledge-base.py
 The PDF lands at `docs/spine-knowledge-base.pdf`. Its last section lists the
 external pages to print to PDF as companion documents for the agent.
 
-### Otto's three back ends (`assets/js/otto.js`)
+### The Otto panel
 
-| Mode | When | Text | Voice |
-| --- | --- | --- | --- |
-| Local (default) | No agent configured | Answers from the FAQ, offline | Browser speech recognition and synthesis |
-| ElevenLabs widget | `agentId` set, `mode: 'widget'` | The official `<elevenlabs-convai>` element, with Otto as its avatar | Handled by ElevenLabs |
-| ElevenLabs client | `agentId` set, `mode: 'client'` | Spine's own chat sheet, driven through `@elevenlabs/client` | Agent audio; Otto's beak moves while it speaks |
+Otto lives in a 56 px round button at the bottom right of the shelf, Reading
+and Settings pages. Tapping it grows a compact panel out of the button
+(spring animation, anchored above the tab bar, at most about a third of a
+phone screen, up to 400 px wide on larger screens). It closes on the X, on
+Escape, on a tap outside, and whenever the scanner opens. Everything is in
+the app's own palette; nothing white is injected.
+
+Inside: an animated Otto whose beak moves while speaking, a transcript,
+suggestion chips, a text field, a microphone button and a mute toggle. A
+typing indicator shows while an answer is on its way. Recommendations render
+as a row of small covers that open the Open Library record.
+
+### Where answers come from (`assets/js/otto.js`)
+
+| Source | Used for | Network |
+| --- | --- | --- |
+| The user's shelf (`window.Shelf`) | counts, statuses, one book's details | none |
+| Open Library subject search (`Shelf.recommend`) | "what should I read next", "something like X" | yes |
+| ElevenLabs agent via `@elevenlabs/client` (mode `client`, default) | everything else, text and voice | yes |
+| Built-in FAQ (`faq.js`) with browser speech | fallback when the agent is unreachable or unset | none |
+
+Text goes to the agent over a text-only WebSocket session; the microphone
+button opens a voice session in which the agent listens and speaks. The
+agent's configured greeting is suppressed in text sessions because Otto has
+already said hello. Setting `mode` to `'widget'` restores the official
+ElevenLabs bubble; `'off'` hides Otto entirely.
+
+### Recommendations
+
+`Shelf.recommend(seedId)` takes the subjects of one book (or the most common
+subjects across the shelf, skipping generic ones like "fiction"), queries
+Open Library's search index sorted by reader rating, drops anything already
+on the shelf or with fewer than five ratings, and returns up to four titles
+with covers. Otto answers "what should I read next", "recommend something",
+"something like 1984" and the `recommend_books` client tool exposes the same
+to the agent.
 
 ### Connecting the ElevenLabs agent
 

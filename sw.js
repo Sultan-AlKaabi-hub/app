@@ -17,7 +17,7 @@
    functionality.
    ========================================================= */
 
-var VERSION = 'spine-v1.3.0';
+var VERSION = 'spine-v1.4.0';
 var SHELL = VERSION + '-shell';
 var COVERS = VERSION + '-covers';
 var DATA = VERSION + '-data';

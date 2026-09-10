@@ -1,54 +1,64 @@
 /* =========================================================
-   otto.js — Ask Otto: help chat with text and voice
+   otto.js — Ask Otto: a small pixel owl that expands into a chat
 
-   Three back ends, chosen by configuration:
+   The launcher is a 56px button with Otto in it. Tapping it grows
+   a compact panel out of the button (bottom-right, above the tab
+   bar) that never covers more than it needs to. Text and voice.
 
-   1. Local (default, no configuration). Otto answers from the FAQ
-      in faq.js. Listening uses the browser's SpeechRecognition,
-      speaking uses speechSynthesis. Works offline, no keys.
+   Where answers come from, in order:
+     1. The user's own shelf (window.Shelf): counts, statuses,
+        details of one book, recommendations by shared subject.
+        Instant, offline, nothing leaves the device.
+     2. The ElevenLabs agent through @elevenlabs/client, when an
+        agent id is set and the device is online. Text goes over
+        a text-only WebSocket session; the microphone button opens
+        a voice session in which the agent listens and speaks.
+     3. The built-in FAQ (faq.js), spoken by the browser's own
+        voice. Also the fallback when the agent is unreachable.
 
-   2. ElevenLabs widget. Set ELEVENLABS.agentId and leave mode at
-      'widget'. The official <elevenlabs-convai> element is mounted
-      with Otto as its avatar and handles text and voice itself.
-      This is the path for the embed code from the ElevenLabs
-      dashboard: the agent-id in that snippet is all Spine needs.
-
-   3. ElevenLabs client. Set mode to 'client'. Spine keeps its own
-      chat sheet and drives the agent through @elevenlabs/client
-      (WebSocket), so Otto's pixel face talks while the agent speaks.
-      Requires a public agent, or a signed-URL endpoint of your own.
-
-   In every mode the FAQ page stays available for reading.
+   The official <elevenlabs-convai> widget is still available by
+   setting mode to 'widget', but it brings its own white UI.
    ========================================================= */
 (function (global) {
   'use strict';
 
   var ELEVENLABS = {
     agentId: 'agent_4901m25102xae2nvb0fsy8bkmy9k',
-    mode: 'widget',             // 'widget' | 'client'
+    mode: 'client',             // 'client' | 'widget' | 'off'
+    clientSrc: 'https://cdn.jsdelivr.net/npm/@elevenlabs/client@1.25.0/+esm',
     widgetSrc: 'https://unpkg.com/@elevenlabs/convai-widget-embed',
-    clientSrc: 'https://cdn.jsdelivr.net/npm/@elevenlabs/client/+esm'
+    replyTimeout: 25000
   };
 
   var KEY = 'spine.otto.v1';
   var $ = function (s, r) { return (r || document).querySelector(s); };
-  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
+  function motionOff() { return document.body.classList.contains('no-motion') || global.matchMedia('(prefers-reduced-motion: reduce)').matches; }
 
-  var prefs = { voice: true };
+  var prefs = { voice: true, seen: false };
   try { prefs = Object.assign(prefs, JSON.parse(localStorage.getItem(KEY)) || {}); } catch (e) {}
   function savePrefs() { try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch (e) {} }
 
-  var avatar = null, fabAvatar = null, opened = false;
-  var rec = null, listening = false, speaking = null;
-  var conv = null, convStarting = false;
+  var avatar = null, fabAvatar = null, isOpen = false, greeted = false;
+  var rec = null, listening = false;
+  var conv = null, convStarting = null, convVoice = false, pendingReply = null;
+  var greetingGuard = false, greetingRelease = null;
+  function afterGreeting() {
+    if (!greetingGuard) return Promise.resolve();
+    return new Promise(function (res) {
+      greetingRelease = res;
+      setTimeout(function () { greetingGuard = false; res(); }, 1800);
+    });
+  }
 
-  /* ---------------- local answering ---------------- */
-  var STOP = /\b(the|a|an|is|it|to|of|and|or|do|does|i|my|me|can|how|what|why|in|on|for|with|this|that|be|are|you|your|spine|app|please|does|did|not|no|yes)\b/g;
+  /* =======================================================
+     1. Local answering: FAQ
+     ======================================================= */
+  var STOP = /\b(the|a|an|is|it|to|of|and|or|do|does|i|my|me|can|how|what|why|in|on|for|with|this|that|be|are|you|your|spine|app|please|did|not|no|yes)\b/g;
   function norm(s) { return String(s || '').toLowerCase().replace(/[^\p{L}\p{N}' ]/gu, ' ').replace(/\s+/g, ' ').trim(); }
   function words(s) { return norm(s).replace(STOP, ' ').split(' ').filter(function (w) { return w.length > 2; }); }
 
@@ -69,17 +79,17 @@
       });
     });
     if (/^(hi|hello|hey|hoot|good (morning|evening|afternoon))\b/.test(q)) {
-      return { text: 'Hello. Ask me anything about scanning, the camera, working offline or your shelf.', chips: starters() };
+      return { text: 'Hello. Ask me about your shelf, how scanning works, or what to read next.', chips: starters() };
     }
     if (/\b(thanks|thank you|cheers)\b/.test(q)) return { text: 'Any time. Happy shelving.', chips: [] };
     if (best && bestScore >= 2) return { text: best.a, chips: related(best) };
-    return {
-      text: 'I am not sure about that one. Try a few plain words, such as "camera permission" or "offline", or pick a topic below.',
-      chips: starters()
-    };
+    return null;
   }
   function starters() {
-    return ['How do I scan a book?', 'Does Spine work offline?', 'The camera does not open.', 'How do I install on iPhone?'];
+    var has = global.Shelf && global.Shelf.count();
+    return has
+      ? ['How many books do I have?', 'What should I read next?', 'What am I reading now?', 'Does Spine work offline?']
+      : ['How do I scan a book?', 'Does Spine work offline?', 'The camera does not open.', 'How do I install on iPhone?'];
   }
   function related(item) {
     var out = [];
@@ -89,10 +99,9 @@
     return out;
   }
 
-  /* ---------------- questions about the user's own shelf ----------------
-     Handled before the FAQ so "how many books do I have" never falls
-     through to a generic answer. Everything reads window.Shelf, which
-     is read-only. */
+  /* =======================================================
+     1b. Local answering: the user's own shelf
+     ======================================================= */
   function plural(n, one, many) { return n + ' ' + (n === 1 ? one : (many || one + 's')); }
   function titleList(books, max) {
     var names = books.slice(0, max || 6).map(function (b) { return b.title + (b.author ? ' by ' + b.author.split(',')[0] : ''); });
@@ -132,10 +141,9 @@
   ];
 
   function extractTitle(q) {
-    var s = q
-      .replace(/\b(who (wrote|is the author of|authored)|author of|written by|when (was|did)|what year (was|did)|how many pages (does|is|in|has)|how long is|what is|what's|tell me about|do i (have|own)|is|have i (read|finished)|did i (read|finish)|about|the book|book|called|titled|publisher of|who published|summar(ise|ize)|describe|published|come out|written|get published|on my shelf|in my library|have)\b/g, ' ')
+    return q
+      .replace(/\b(who (wrote|is the author of|authored)|author of|written by|when (was|did)|what year (was|did)|how many pages (does|is|in|has)|how long is|what is|what's|tell me about|do i (have|own)|is|have i (read|finished)|did i (read|finish)|about|the book|book|called|titled|publisher of|who published|summar(ise|ize)|describe|published|come out|written|get published|on my shelf|in my library|have|similar to|like|recommend|suggest|something|more|books|another)\b/g, ' ')
       .replace(/[?.!,]/g, ' ').replace(/\s+/g, ' ').trim();
-    return s;
   }
 
   function shelfAnswer(question) {
@@ -144,16 +152,15 @@
     var S = global.Shelf;
     var mentionsShelf = /\b(book|books|shelf|library|read|reading|finished|unread|pages|author|authors|collection)\b/.test(q);
 
-    // ---- counts and stats
     if (/\bhow many\b/.test(q) && mentionsShelf && !/\bpages (does|is|in|has)\b/.test(q)) {
       var s = S.summary();
       if (!s.total && !s.pending) return { text: 'Your shelf is empty so far. Scan a barcode to add the first book.', chips: ['How do I scan a book?'] };
       if (/\b(finished|have i read|did i read|completed|done)\b/.test(q)) return { text: 'You have finished ' + plural(s.finished, 'book') + ' out of ' + s.total + (s.pagesRead ? ', which is ' + s.pagesRead.toLocaleString() + ' pages read' : '') + '.', chips: ['What am I reading now?', 'What is left to read?'] };
-      if (/\b(left|to read|unread|still|remaining|haven t read|not read|want)\b/.test(q)) return { text: 'You have ' + plural(s.toRead, 'book') + ' still to read' + (s.reading ? ' and ' + plural(s.reading, 'book') + ' in progress' : '') + (s.pagesToRead ? ', about ' + s.pagesToRead.toLocaleString() + ' pages' : '') + '.', chips: ['What is on my to-read list?'] };
+      if (/\b(left|to read|unread|still|remaining|haven t read|not read|want)\b/.test(q)) return { text: 'You have ' + plural(s.toRead, 'book') + ' still to read' + (s.reading ? ' and ' + plural(s.reading, 'book') + ' in progress' : '') + (s.pagesToRead ? ', about ' + s.pagesToRead.toLocaleString() + ' pages' : '') + '.', chips: ['What is on my to-read list?', 'What should I read next?'] };
       if (/\b(reading|in progress|currently)\b/.test(q)) return { text: s.reading ? 'You are reading ' + plural(s.reading, 'book') + ' right now: ' + titleList(s.readingNow) + '.' : 'Nothing is marked as Reading at the moment.', chips: ['How many have I finished?'] };
       if (/\bauthors?\b/.test(q)) return { text: 'Your shelf has ' + plural(s.authors, 'author') + (s.topAuthors.length ? '. Most shelved: ' + s.topAuthors.join(', ') : '') + '.', chips: ['How many books do I have?'] };
       if (/\bpages\b/.test(q)) return { text: 'Across the shelf there are ' + s.pagesTotal.toLocaleString() + ' pages, of which you have read ' + s.pagesRead.toLocaleString() + '.', chips: ['How many have I finished?'] };
-      return { text: 'You have ' + plural(s.total, 'book') + ' on your shelf: ' + s.finished + ' finished, ' + s.reading + ' reading and ' + s.toRead + ' to read' + (s.pending ? ', plus ' + plural(s.pending, 'scan') + ' waiting for a signal' : '') + '.', chips: ['What am I reading now?', 'What is left to read?', 'Who is my most shelved author?'] };
+      return { text: 'You have ' + plural(s.total, 'book') + ' on your shelf: ' + s.finished + ' finished, ' + s.reading + ' reading and ' + s.toRead + ' to read' + (s.pending ? ', plus ' + plural(s.pending, 'scan') + ' waiting for a signal' : '') + '.', chips: ['What am I reading now?', 'What is left to read?', 'What should I read next?'] };
     }
     if (/\b(most (shelved|read|common)|favou?rite) (author|writer)\b/.test(q)) {
       var s2 = S.summary();
@@ -163,9 +170,9 @@
       var r = S.list('reading');
       return { text: r.count ? 'You are reading ' + titleList(r.books) + '.' : 'Nothing is marked as Reading. Open a book and tap Reading to track it.', chips: ['What is left to read?'] };
     }
-    if (/\b(to[- ]read|left to read|unread|haven t read|not read yet|next|queue)\b/.test(q) && /\b(what|which|list|show|left)\b/.test(q)) {
+    if (/\b(to[- ]read|left to read|unread|haven t read|not read yet|queue)\b/.test(q) && /\b(what|which|list|show|left)\b/.test(q)) {
       var w = S.list('want');
-      return { text: w.count ? plural(w.count, 'book') + ' to read: ' + titleList(w.books, 8) + '.' : 'Your to-read list is empty.', chips: ['What have I finished?'] };
+      return { text: w.count ? plural(w.count, 'book') + ' to read: ' + titleList(w.books, 8) + '.' : 'Your to-read list is empty.', chips: ['What should I read next?'] };
     }
     if (/\b(what|which) (have i|did i) (read|finish)|\bfinished books\b|\blist .*finished\b/.test(q)) {
       var f = S.list('read');
@@ -179,8 +186,8 @@
       var n = S.summary().newest;
       return n ? { text: 'The newest book on the shelf is ' + n.title + (n.author ? ' by ' + n.author : '') + ', added ' + (n.addedAgo === 'today' ? 'today' : n.addedAgo + ' ago') + '.', chips: ['Tell me about ' + n.title] } : null;
     }
+    if (isRecommendAsk(q)) return null;   // handled asynchronously by recommend()
 
-    // ---- a specific book
     var aspect = null;
     for (var i = 0; i < ASPECTS.length; i++) if (ASPECTS[i][1].test(q)) { aspect = ASPECTS[i][0]; break; }
     var title = extractTitle(q);
@@ -189,10 +196,9 @@
       if (hits.length && (hits[0].score >= 55 || (aspect && hits[0].score >= 30))) {
         var b = hits[0].book;
         var more = hits.slice(1).filter(function (h) { return h.score >= 50; }).map(function (h) { return h.book.title; });
-        return {
-          text: describeBook(b, aspect || (/\b(do i have|is .* on my shelf|have i got|did i scan)\b/.test(q) ? 'have' : 'have')) + (more.length ? ' You also have ' + more.join(' and ') + '.' : ''),
-          chips: ['Who wrote ' + b.title + '?', 'When was ' + b.title + ' published?', 'What is ' + b.title + ' about?'].filter(function (c) { return c.indexOf(aspect === 'author' ? 'Who' : aspect === 'year' ? 'When' : aspect === 'about' ? 'What is' : '\u0000') !== 0; })
-        };
+        var chipsFor = ['Who wrote ' + b.title + '?', 'When was ' + b.title + ' published?', 'What is ' + b.title + ' about?', 'Something like ' + b.title]
+          .filter(function (c) { return !(aspect === 'author' && c.indexOf('Who') === 0) && !(aspect === 'year' && c.indexOf('When') === 0) && !(aspect === 'about' && c.indexOf('What is') === 0); }).slice(0, 3);
+        return { text: describeBook(b, aspect || 'have') + (more.length ? ' You also have ' + more.join(' and ') + '.' : ''), chips: chipsFor };
       }
       if (aspect || /\b(do i have|have i got|is .* on my shelf)\b/.test(q)) {
         if (!S.count()) return { text: 'Your shelf is empty, so I cannot find that one. Scan it and ask me again.', chips: ['How do I scan a book?'] };
@@ -202,26 +208,80 @@
     return null;
   }
 
-  /* ---------------- transcript ---------------- */
-  function bubble(text, who) {
-    var log = $('#chat-log');
+  /* ---- recommendations: books that share a subject with the shelf ---- */
+  function isRecommendAsk(q) {
+    return /\b(recommend|suggest|similar|something like|what (should|could|can) i read|read next|what next|more like|books like|anything like|next book|another suggestion)\b/.test(q);
+  }
+  function recommend(question) {
+    var q = norm(question);
+    var S = global.Shelf;
+    if (!S) return Promise.resolve(null);
+    if (!S.count()) return Promise.resolve({ text: 'Scan a few books first and I will find more along the same lines.', chips: ['How do I scan a book?'] });
+    if (!navigator.onLine) return Promise.resolve({ text: 'Recommendations need a connection to the catalogue. Ask me again when you are back online.', chips: [] });
+    var seed = null;
+    var t = extractTitle(q);
+    if (t.length >= 3) { var hit = S.find(t, 1)[0]; if (hit && hit.score >= 40) seed = hit.book; }
+    return S.recommend(seed ? seed.id : null).then(function (res) {
+      if (!res || !res.books.length) return { text: 'I could not find anything close enough in the catalogue just now. Try naming a book: "something like Dune".', chips: [] };
+      var lead = seed
+        ? 'If you liked ' + seed.title + ', these share its shelf: '
+        : 'Going by what you read (' + res.subjects.slice(0, 2).join(', ') + '), you might like: ';
+      return {
+        text: lead + res.books.map(function (b) { return b.title + (b.author ? ' by ' + b.author : '') + (b.year ? ' (' + b.year + ')' : ''); }).join('; ') + '.',
+        recs: res.books,
+        chips: ['Another suggestion', seed ? 'What is ' + seed.title + ' about?' : 'What am I reading now?']
+      };
+    }).catch(function () { return { text: 'The catalogue did not answer in time. Try again in a moment.', chips: [] }; });
+  }
+
+  /* =======================================================
+     Panel UI
+     ======================================================= */
+  function log() { return $('#otto-log'); }
+  function bubble(text, who, extra) {
     var el = document.createElement('div');
-    el.className = 'msg msg--' + who;
-    el.innerHTML = '<div class="msg__b">' + esc(text) + '</div>';
-    log.appendChild(el);
-    log.scrollTop = log.scrollHeight;
+    el.className = 'omsg omsg--' + who;
+    el.innerHTML = '<div class="omsg__b">' + esc(text) + '</div>' + (extra || '');
+    log().appendChild(el);
+    scrollLog();
     return el;
   }
-  function chips(list) {
-    var host = $('#chat-chips');
-    host.innerHTML = (list || []).map(function (c) { return '<button class="chip chip--q">' + esc(c) + '</button>'; }).join('');
+  function recCards(books) {
+    return '<div class="recs">' + books.map(function (b, i) {
+      return '<a class="rec" style="--i:' + i + '" href="' + esc(b.url) + '" target="_blank" rel="noopener">' +
+        '<span class="rec__cov">' + (b.cover ? '<img src="' + esc(b.cover) + '" alt="" loading="lazy">' : '<i>' + esc((b.title || '?').charAt(0)) + '</i>') + '</span>' +
+        '<span class="rec__t">' + esc(b.title) + '</span>' +
+        '<span class="rec__a">' + esc(b.author || '') + (b.year ? ' · ' + b.year : '') + '</span></a>';
+    }).join('') + '</div>';
   }
-  function status(t) { $('#chat-status').textContent = t; }
+  function chips(list) {
+    $('#otto-chips').innerHTML = (list || []).map(function (c) { return '<button class="chip chip--q" type="button">' + esc(c) + '</button>'; }).join('');
+  }
+  function status(t) { if (t === undefined) return $('#otto-status').textContent; $('#otto-status').textContent = t || ''; }
+  function scrollLog() { var l = log(); l.scrollTop = l.scrollHeight; }
+  var typingEl = null;
+  function typing(on) {
+    if (on && !typingEl) {
+      typingEl = document.createElement('div');
+      typingEl.className = 'omsg omsg--otto omsg--typing';
+      typingEl.innerHTML = '<div class="omsg__b"><i></i><i></i><i></i></div>';
+      log().appendChild(typingEl); scrollLog();
+    } else if (!on && typingEl) { typingEl.remove(); typingEl = null; }
+  }
 
-  /* ---------------- browser speech ---------------- */
+  function ottoSays(r) {
+    typing(false);
+    if (avatar) avatar.hop();
+    bubble(r.text, 'otto', r.recs ? recCards(r.recs) : '');
+    chips(r.chips);
+    say(r.text);
+  }
+
+  /* =======================================================
+     Browser speech (fallback when there is no agent)
+     ======================================================= */
   function canListen() { return !!(global.SpeechRecognition || global.webkitSpeechRecognition); }
   function canSpeak() { return 'speechSynthesis' in global; }
-
   function pickVoice() {
     var vs = speechSynthesis.getVoices();
     var pref = ['Google UK English Male', 'Daniel', 'Google US English', 'Microsoft George', 'Samantha'];
@@ -231,256 +291,287 @@
     }
     return vs.filter(function (x) { return /^en/i.test(x.lang); })[0] || vs[0] || null;
   }
-
   function say(text) {
-    if (!prefs.voice || !canSpeak()) return;
+    if (!prefs.voice || !canSpeak() || convVoice) return;
     try { speechSynthesis.cancel(); } catch (e) {}
     var u = new SpeechSynthesisUtterance(text);
     var v = pickVoice();
     if (v) u.voice = v;
     u.rate = 1.0; u.pitch = 1.1;
     u.onstart = function () { if (avatar) avatar.talking(true); status('Speaking…'); };
-    u.onend = u.onerror = function () { if (avatar) avatar.talking(false); speaking = null; status(''); };
-    speaking = u;
+    u.onend = u.onerror = function () { if (avatar) avatar.talking(false); if (status() === 'Speaking…') status(''); };
     speechSynthesis.speak(u);
   }
   function hush() {
     if (canSpeak()) { try { speechSynthesis.cancel(); } catch (e) {} }
     if (avatar) avatar.talking(false);
-    speaking = null;
   }
-
   function startListening() {
     var SR = global.SpeechRecognition || global.webkitSpeechRecognition;
-    if (!SR) { status('Voice input is not available in this browser. Type instead.'); return; }
+    if (!SR) { status('Voice input is not available here. Type instead.'); return; }
     hush();
     rec = new SR();
     rec.lang = (navigator.language || 'en').indexOf('en') === 0 ? navigator.language : 'en-GB';
     rec.interimResults = true;
-    rec.maxAlternatives = 1;
     var finalText = '';
-    rec.onstart = function () { listening = true; $('#chat-mic').setAttribute('aria-pressed', 'true'); status('Listening…'); };
+    rec.onstart = function () { listening = true; $('#otto-mic').setAttribute('aria-pressed', 'true'); status('Listening…'); };
     rec.onresult = function (e) {
       var interim = '';
       for (var i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) finalText += e.results[i][0].transcript;
-        else interim += e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalText += e.results[i][0].transcript; else interim += e.results[i][0].transcript;
       }
-      $('#chat-input').value = finalText || interim;
+      $('#otto-input').value = finalText || interim;
     };
-    rec.onerror = function (e) {
-      status(e.error === 'not-allowed' ? 'Microphone permission is off. Allow it and try again.' : 'Could not hear that. Try again.');
-    };
+    rec.onerror = function (e) { status(e.error === 'not-allowed' ? 'Microphone permission is off.' : 'Could not hear that.'); };
     rec.onend = function () {
       listening = false;
-      $('#chat-mic').setAttribute('aria-pressed', 'false');
-      if (finalText.trim()) send(finalText.trim());
-      else if ($('#chat-status').textContent === 'Listening…') status('');
+      $('#otto-mic').setAttribute('aria-pressed', 'false');
+      if (finalText.trim()) send(finalText.trim()); else if (status() === 'Listening…') status('');
     };
     try { rec.start(); } catch (e) { status('Could not start the microphone.'); }
   }
   function stopListening() { if (rec) { try { rec.stop(); } catch (e) {} } }
 
-  /* ---------------- ElevenLabs client mode ---------------- */
-  function ensureConversation(voice) {
-    if (conv) return Promise.resolve(conv);
-    if (convStarting) return convStarting;
-    status('Connecting to Otto…');
-    convStarting = import(ELEVENLABS.clientSrc).then(function (mod) {
-      var Conversation = mod.Conversation || (mod.default && mod.default.Conversation);
-      return Conversation.startSession({
-        agentId: ELEVENLABS.agentId,
-        connectionType: 'websocket',
-        textOnly: !voice,
-        onConnect: function () { status(''); },
-        onDisconnect: function () { conv = null; status(''); if (avatar) avatar.talking(false); },
-        onError: function (e) { status('Connection problem: ' + (e && e.message ? e.message : e)); },
-        onModeChange: function (m) {
-          var mode = m && m.mode;
-          if (avatar) avatar.talking(mode === 'speaking');
-          status(mode === 'speaking' ? 'Speaking…' : mode === 'listening' ? 'Listening…' : '');
-        },
-        onMessage: function (m) {
-          if (!m || !m.message) return;
-          if (m.source === 'user') bubble(m.message, 'me');
-          else bubble(m.message, 'otto');
-        }
-      });
-    }).then(function (c) { conv = c; convStarting = null; return c; })
-      .catch(function (e) { convStarting = null; status('Could not reach the voice agent. Answering from the FAQ instead.'); throw e; });
-    return convStarting;
-  }
-  function endConversation() {
-    if (conv) { try { conv.endSession(); } catch (e) {} conv = null; }
-  }
-
-  /* ---------------- send ---------------- */
-  function send(text) {
-    text = String(text || '').trim();
-    if (!text) return;
-    $('#chat-input').value = '';
-    bubble(text, 'me');
-    chips([]);
-    if (ELEVENLABS.agentId && ELEVENLABS.mode === 'client') {
-      ensureConversation(false).then(function (c) { c.sendUserMessage(text); }).catch(function () { localReply(text); });
-      return;
-    }
-    localReply(text);
-  }
-  function localReply(text) {
-    var r = shelfAnswer(text) || answer(text);
-    status('');
-    setTimeout(function () {
-      if (avatar) avatar.hop();
-      bubble(r.text, 'otto');
-      chips(r.chips);
-      say(r.text);
-    }, 260);
-  }
-
-  /* ---------------- sheet ---------------- */
-  function open() {
-    var sheet = $('#chat');
-    if (!sheet) return;
-    sheet.hidden = false;
-    if (!avatar) avatar = global.Pixel.mountAvatar($('#otto-chat-cv'), { still: document.body.classList.contains('no-motion') });
-    avatar.pose('wave'); avatar.hop();
-    setTimeout(function () { if (avatar) avatar.pose('idle'); }, 1400);
-    $('#chat-voice').setAttribute('aria-pressed', prefs.voice ? 'true' : 'false');
-    $('#chat-mic').hidden = !(canListen() || (ELEVENLABS.agentId && ELEVENLABS.mode === 'client'));
-    if (!opened) {
-      opened = true;
-      bubble('Hoot. I am Otto. Ask me how scanning works, what happens offline, or how to fix the camera.', 'otto');
-      chips(starters());
-    }
-    setTimeout(function () { var p = $('#chat .sheet__panel'); if (p) p.focus({ preventScroll: true }); }, 30);
-  }
-  function onClose() {
-    hush(); stopListening(); endConversation();
-    if (avatar) { avatar.stop(); avatar = null; }
-  }
-
-  /* ---------------- ElevenLabs widget mode ---------------- */
-  function ottoPng() {
-    var c = document.createElement('canvas');
-    c.width = 112; c.height = 112;
-    var src = document.createElement('canvas');
-    var a = global.Pixel.mountAvatar(src, { still: true });
-    return new Promise(function (res) {
-      requestAnimationFrame(function () {
-        requestAnimationFrame(function () {
-          var x = c.getContext('2d');
-          x.imageSmoothingEnabled = false;
-          x.fillStyle = '#141A31'; x.fillRect(0, 0, 112, 112);
-          x.drawImage(src, 0, 0, 112, 112);
-          a.stop();
-          res(c.toDataURL('image/png'));
-        });
-      });
-    });
-  }
-  var widgetEl = null;
-  function mountWidget() {
-    if (widgetEl || !ELEVENLABS.agentId || ELEVENLABS.mode !== 'widget') return;
-    ottoPng().then(function (png) {
-      widgetEl = document.createElement('elevenlabs-convai');
-      widgetEl.setAttribute('agent-id', ELEVENLABS.agentId);
-      widgetEl.setAttribute('avatar-image-url', png);
-      widgetEl.setAttribute('action-text', 'Ask Otto');
-      widgetEl.setAttribute('start-call-text', 'Talk to Otto');
-      widgetEl.setAttribute('end-call-text', 'Done');
-      widgetEl.setAttribute('listening-text', 'Otto is listening');
-      widgetEl.setAttribute('speaking-text', 'Otto is speaking');
-      // Client tools: the agent calls these in the browser, so shelf data
-      // stays on the device. Register the same three tools on the agent
-      // (docs/elevenlabs-client-tools.json) or they are never invoked.
-      widgetEl.addEventListener('elevenlabs-convai:call', function (e) {
-        var cfg = e.detail && e.detail.config;
-        if (!cfg) return;
-        cfg.clientTools = Object.assign(cfg.clientTools || {}, clientTools());
-        var s = global.Shelf ? global.Shelf.summary() : null;
-        cfg.dynamicVariables = Object.assign(cfg.dynamicVariables || {}, s ? {
-          book_count: s.total, finished_count: s.finished, reading_count: s.reading, to_read_count: s.toRead, pages_read: s.pagesRead
-        } : {});
-      });
-      document.body.appendChild(widgetEl);
-      if (!$('script[data-el-widget]')) {
-        var s = document.createElement('script');
-        s.src = ELEVENLABS.widgetSrc; s.async = true; s.type = 'text/javascript';
-        s.setAttribute('data-el-widget', '1');
-        document.head.appendChild(s);
-      }
-    });
-  }
-  function setWidgetVisible(on) {
-    if (widgetEl) widgetEl.style.display = on ? '' : 'none';
-  }
+  /* =======================================================
+     ElevenLabs client
+     ======================================================= */
+  function agentReady() { return ELEVENLABS.mode === 'client' && !!ELEVENLABS.agentId && navigator.onLine; }
 
   function clientTools() {
     var S = global.Shelf;
     return {
-      get_shelf_summary: function () {
-        return JSON.stringify(S ? S.summary() : { total: 0 });
-      },
+      get_shelf_summary: function () { return JSON.stringify(S ? S.summary() : { total: 0 }); },
       find_book: function (p) {
         var q = (p && (p.query || p.title || p.q)) || '';
         var hits = S ? S.find(q, 3) : [];
         return JSON.stringify(hits.length ? { found: true, best: hits[0].book, others: hits.slice(1).map(function (h) { return h.book; }) } : { found: false, query: q, shelf_size: S ? S.count() : 0 });
       },
       list_books: function (p) {
-        var st = (p && p.status) || 'all';
-        return JSON.stringify(S ? S.list(st, (p && p.limit) || 12) : { count: 0, books: [] });
+        return JSON.stringify(S ? S.list((p && p.status) || 'all', (p && p.limit) || 12) : { count: 0, books: [] });
+      },
+      recommend_books: function (p) {
+        if (!S) return JSON.stringify({ books: [] });
+        var t = p && (p.title || p.query);
+        var seed = t ? (S.find(t, 1)[0] || {}).book : null;
+        return S.recommend(seed ? seed.id : null).then(function (r) { return JSON.stringify(r || { books: [] }); })
+          .catch(function () { return JSON.stringify({ books: [], error: 'catalogue unavailable' }); });
       }
     };
   }
 
-  /* ---------------- wiring ---------------- */
-  function init() {
-    if (!$('#chat')) return;
-    var fab = $('#otto-fab');
-    if (fab) {
-      fabAvatar = global.Pixel.mountAvatar($('#otto-fab-cv'), { still: true });
-      fab.onclick = open;
+  function startConversation(voice) {
+    if (conv && convVoice === voice) return Promise.resolve(conv);
+    if (convStarting) return convStarting;
+    var teardown = conv ? endConversation() : Promise.resolve();
+    status(voice ? 'Connecting the line…' : 'Otto is thinking…');
+    greetingGuard = !voice; greetingRelease = null;
+    convStarting = teardown.then(function () { return import(ELEVENLABS.clientSrc); }).then(function (mod) {
+      var Conversation = mod.Conversation;
+      var s = global.Shelf ? global.Shelf.summary() : null;
+      return Conversation.startSession({
+        agentId: ELEVENLABS.agentId,
+        connectionType: 'websocket',
+        textOnly: !voice,
+        clientTools: clientTools(),
+        dynamicVariables: s ? { book_count: s.total, finished_count: s.finished, reading_count: s.reading, to_read_count: s.toRead, pages_read: s.pagesRead } : {},
+        onConnect: function () { status(voice ? 'Listening…' : ''); },
+        onDisconnect: function () {
+          conv = null; convVoice = false;
+          if (avatar) avatar.talking(false);
+          $('#otto-mic').setAttribute('aria-pressed', 'false');
+          $('#otto-panel').classList.remove('is-voice');
+          status('');
+        },
+        onError: function () { status('Connection problem.'); },
+        onModeChange: function (m) {
+          var mode = m && m.mode;
+          if (avatar) avatar.talking(mode === 'speaking');
+          if (voice) status(mode === 'speaking' ? 'Otto is speaking…' : mode === 'listening' ? 'Listening…' : '');
+        },
+        onMessage: function (m) {
+          if (!m || !m.message) return;
+          if (m.source === 'user') { if (voice) bubble(m.message, 'me'); return; }
+          // Text sessions: the agent opens with its configured greeting.
+          // Otto has already said hello, so that first line is dropped and
+          // the queued question goes out once it has passed.
+          if (!voice && greetingGuard) { greetingGuard = false; if (greetingRelease) greetingRelease(); return; }
+          typing(false);
+          if (pendingReply) { clearTimeout(pendingReply.timer); pendingReply = null; }
+          if (avatar) avatar.hop();
+          bubble(m.message, 'otto');
+          chips(voice ? [] : starters().slice(0, 2));
+          if (!voice) say(m.message);
+          if (voice) status('Otto is speaking…');
+        }
+      });
+    }).then(function (c) {
+      conv = c; convVoice = voice; convStarting = null;
+      if (c.setVolume) { try { c.setVolume({ volume: prefs.voice ? 1 : 0 }); } catch (e) {} }
+      return c;
+    }).catch(function (e) {
+      convStarting = null; conv = null; convVoice = false;
+      throw e;
+    });
+    return convStarting;
+  }
+  function endConversation() {
+    var c = conv; conv = null; convVoice = false;
+    $('#otto-panel').classList.remove('is-voice');
+    $('#otto-mic').setAttribute('aria-pressed', 'false');
+    if (avatar) avatar.talking(false);
+    if (!c) return Promise.resolve();
+    try { return Promise.resolve(c.endSession()).catch(function () {}); } catch (e) { return Promise.resolve(); }
+  }
+
+  /* =======================================================
+     Send
+     ======================================================= */
+  function send(text) {
+    text = String(text || '').trim();
+    if (!text) return;
+    $('#otto-input').value = '';
+    hush();
+    bubble(text, 'me');
+    chips([]);
+    var q = norm(text);
+
+    if (conv && convVoice) { conv.sendUserMessage(text); return; }
+
+    var local = shelfAnswer(text);
+    if (local) { typing(true); setTimeout(function () { ottoSays(local); }, 220); return; }
+    if (isRecommendAsk(q)) { typing(true); recommend(text).then(function (r) { ottoSays(r || answer(text) || fallback()); }); return; }
+
+    if (agentReady()) {
+      typing(true);
+      startConversation(false).then(function (c) {
+        return afterGreeting().then(function () {
+          c.sendUserMessage(text);
+          pendingReply = { timer: setTimeout(function () {
+            pendingReply = null;
+            ottoSays(answer(text) || fallback());
+          }, ELEVENLABS.replyTimeout) };
+        });
+      }).catch(function () { ottoSays(answer(text) || fallback()); });
+      return;
     }
-    $('#chat-form').onsubmit = function (e) { e.preventDefault(); send($('#chat-input').value); };
-    $('#chat-mic').onclick = function () {
-      if (ELEVENLABS.agentId && ELEVENLABS.mode === 'client') {
-        if (conv) { endConversation(); status(''); return; }
-        ensureConversation(true).catch(function () {});
-        return;
+    typing(true);
+    setTimeout(function () { ottoSays(answer(text) || fallback()); }, 260);
+  }
+  function fallback() {
+    return { text: 'I am not sure about that one. Try a few plain words, or pick a topic below.', chips: starters() };
+  }
+
+  /* =======================================================
+     Open / close
+     ======================================================= */
+  function open() {
+    var panel = $('#otto-panel'), fab = $('#otto-fab');
+    if (!panel || isOpen) return;
+    isOpen = true;
+    panel.hidden = false;
+    fab.classList.add('is-hidden');
+    requestAnimationFrame(function () { panel.classList.add('is-open'); });
+    if (!avatar) avatar = global.Pixel.mountAvatar($('#otto-cv'), { still: motionOff() });
+    avatar.pose('wave'); avatar.hop();
+    setTimeout(function () { if (avatar) avatar.pose('idle'); }, 1400);
+    $('#otto-voice').setAttribute('aria-pressed', prefs.voice ? 'true' : 'false');
+    $('#otto-mic').hidden = !(agentReady() || canListen());
+    if (!greeted) {
+      greeted = true;
+      var has = global.Shelf && global.Shelf.count();
+      bubble(has ? 'Hoot. Ask me about your shelf, what to read next, or how anything here works.' : 'Hoot. I am Otto, the archivist. Ask me how scanning works, or what happens offline.', 'otto');
+      chips(starters());
+      if (!prefs.seen && ELEVENLABS.agentId && ELEVENLABS.mode === 'client') {
+        var note = 'Questions I cannot answer here go to the ElevenLabs agent.';
+        status(note);
+        prefs.seen = true; savePrefs();
+        setTimeout(function () { if (status() === note) status(''); }, 5000);
       }
-      if (listening) stopListening(); else startListening();
-    };
-    $('#chat-voice').onclick = function () {
+    }
+    setTimeout(function () { if (matchMedia('(min-width: 640px)').matches) $('#otto-input').focus(); }, 380);
+  }
+  function close() {
+    var panel = $('#otto-panel'), fab = $('#otto-fab');
+    if (!panel || !isOpen) return;
+    isOpen = false;
+    hush(); stopListening(); endConversation();
+    panel.classList.remove('is-open');
+    fab.classList.remove('is-hidden');
+    setTimeout(function () { if (!isOpen) panel.hidden = true; }, motionOff() ? 0 : 320);
+    if (avatar) { avatar.stop(); avatar = null; }
+  }
+  function toggle() { if (isOpen) close(); else open(); }
+
+  /* =======================================================
+     Widget mode (optional): the official ElevenLabs bubble
+     ======================================================= */
+  var widgetEl = null;
+  function mountWidget() {
+    if (widgetEl) return;
+    widgetEl = document.createElement('elevenlabs-convai');
+    widgetEl.setAttribute('agent-id', ELEVENLABS.agentId);
+    widgetEl.setAttribute('variant', 'compact');
+    widgetEl.addEventListener('elevenlabs-convai:call', function (e) {
+      var cfg = e.detail && e.detail.config; if (!cfg) return;
+      cfg.clientTools = Object.assign(cfg.clientTools || {}, clientTools());
+    });
+    document.body.appendChild(widgetEl);
+    var s = document.createElement('script');
+    s.src = ELEVENLABS.widgetSrc; s.async = true; document.head.appendChild(s);
+  }
+
+  /* =======================================================
+     Wiring
+     ======================================================= */
+  function init() {
+    var fab = $('#otto-fab');
+    if (!fab) return;
+    if (ELEVENLABS.mode === 'widget' && ELEVENLABS.agentId) { fab.hidden = true; mountWidget(); return; }
+    if (ELEVENLABS.mode === 'off') { fab.hidden = true; return; }
+
+    fabAvatar = global.Pixel.mountAvatar($('#otto-fab-cv'), { still: motionOff() });
+    fab.onclick = toggle;
+    $('#otto-close').onclick = close;
+    $('#otto-form').onsubmit = function (e) { e.preventDefault(); send($('#otto-input').value); };
+    $('#otto-chips').onclick = function (e) { var b = e.target.closest('.chip--q'); if (b) send(b.textContent); };
+    $('#otto-voice').onclick = function () {
       prefs.voice = !prefs.voice; savePrefs();
       this.setAttribute('aria-pressed', prefs.voice ? 'true' : 'false');
       if (!prefs.voice) hush();
       if (conv && conv.setVolume) { try { conv.setVolume({ volume: prefs.voice ? 1 : 0 }); } catch (e) {} }
-      status(prefs.voice ? 'Otto will read answers aloud.' : 'Otto is muted.');
-      setTimeout(function () { status(''); }, 1600);
+      status(prefs.voice ? 'Otto will speak.' : 'Otto is muted.');
+      setTimeout(function () { status(''); }, 1500);
     };
-    $('#chat-chips').onclick = function (e) {
-      var b = e.target.closest('.chip--q'); if (b) send(b.textContent);
+    $('#otto-mic').onclick = function () {
+      if (agentReady()) {
+        if (conv && convVoice) { endConversation(); status(''); return; }
+        $('#otto-panel').classList.add('is-voice');
+        this.setAttribute('aria-pressed', 'true');
+        startConversation(true).catch(function (e) {
+          $('#otto-panel').classList.remove('is-voice');
+          $('#otto-mic').setAttribute('aria-pressed', 'false');
+          status(/NotAllowed|Permission/i.test(String(e && (e.name || e.message))) ? 'Microphone permission is off.' : 'Could not start the call. Try typing.');
+        });
+        return;
+      }
+      if (listening) stopListening(); else startListening();
     };
+    document.addEventListener('pointerdown', function (e) {
+      if (!isOpen) return;
+      if (e.target.closest('#otto-panel, #otto-fab')) return;
+      close();
+    });
     if (canSpeak()) { try { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = function () {}; } catch (e) {} }
-
-    // Widget mode: the ElevenLabs bubble replaces the local fab.
-    if (ELEVENLABS.agentId && ELEVENLABS.mode === 'widget') {
-      if (fab) fab.hidden = true;
-      mountWidget();
-    }
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 
   global.Otto = {
-    open: open,
-    onClose: onClose,
-    answer: answer,
-    shelfAnswer: shelfAnswer,
-    clientTools: clientTools,
-    setWidgetVisible: setWidgetVisible,
+    open: open, close: close, toggle: toggle,
+    isOpen: function () { return isOpen; },
+    onRoute: function (page) { if (page === 'scan' && isOpen) close(); if (widgetEl) widgetEl.style.display = page === 'scan' ? 'none' : ''; },
+    answer: answer, shelfAnswer: shelfAnswer, recommend: recommend, clientTools: clientTools,
     config: ELEVENLABS
   };
 })(window);
